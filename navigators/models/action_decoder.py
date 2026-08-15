@@ -39,7 +39,7 @@ class ActionDecoder(nn.Module):
 
     def get_losses(self, preds, targets):
         plan_loss, plan_loss_debug = self.plan_head.get_losses(
-            preds["plan"]["plans"],
+            preds["plan"],
             targets["future_poses"],
         )
         loss_dict = dict(

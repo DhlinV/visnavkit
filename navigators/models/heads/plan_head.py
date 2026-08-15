@@ -63,9 +63,9 @@ class PlanHead(nn.Module):
         plans = self.plan_head(x) * self.scale
         return dict(plans=plans)
 
-    def get_losses(self, pred, gt):
-        """MHP loss with Laplacian NLL for regression"""
-
+    def get_losses(self, preds, gt):
+        """MHP loss with Laplacian NLL for regression. ``preds`` is this head's forward output dict."""
+        pred = preds["plans"]
         target = gt[:, None, :, :]  # add batch dim
 
         # reshape
