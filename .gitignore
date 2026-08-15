@@ -1,0 +1,22 @@
+__pycache__/
+*.py[oc]
+.env
+.DS_Store
+.vscode
+
+build/
+dist/
+wheels/
+*.egg-info
+
+/data/
+/logs/
+/checkpoints/
+/results/
+outputs
+wandb
+*.log
+
+# never commit model weights
+*.ckpt
+*.onnx

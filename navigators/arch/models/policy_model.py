@@ -1,0 +1,49 @@
+import torch
+import torch.nn as nn
+
+
+class PolicyModel(nn.Module):
+    def __init__(self, summarizer, plan_head):
+        super().__init__()
+        self.summarizer = summarizer
+        self.plan_head = plan_head
+
+        if not self.plan_head.pretrained:
+            self.apply(self._init_weights)
+
+    # from: https://github.com/jchengai/planTF/blob/main/src/models/planTF/planning_model.py#L82
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.xavier_uniform_(m.weight)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm) and m.weight is not None:  # adaLN uses affine-less LN
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.BatchNorm1d):
+            nn.init.ones_(m.weight)
+            nn.init.zeros_(m.bias)
+        elif isinstance(m, nn.Embedding):
+            nn.init.normal_(m.weight, mean=0.0, std=0.02)
+
+    def forward(self, x):
+        B, F, D = x.shape
+        x = self.summarizer(x)  # [B, F, feat_size] -> [B, F, feat_size]
+        # if summarizer made a prediction for each token, convert it to a batch
+        if len(x.shape) == 3:
+            x = x.view((B * F, D))  # [B, F, feat_size] -> [B * F, feat_size]
+
+        plan_out = self.plan_head(x)  # [B * F, feat_size] -> [B*F, plan_out_size]
+        return dict(plan=plan_out)
+
+    def get_losses(self, preds, targets):
+        plan_loss, plan_loss_debug = self.plan_head.get_losses(
+            preds["plan"]["plans"],
+            targets["future_poses"],
+        )
+        loss_dict = dict(
+            total=plan_loss["total"],
+            reg=plan_loss["reg"],
+            cls=plan_loss["cls"],
+        )
+        return loss_dict, plan_loss_debug

@@ -1,0 +1,5 @@
+lr: 1e-4
+eta_min: 5e-6
+weight_decay: 0.0001
+warmup_steps: 100
+max_grad_norm: null  # max total grad norm for clipping; null/0 disables clipping

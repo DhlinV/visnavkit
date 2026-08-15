@@ -1,0 +1,15 @@
+# Open-loop metrics config, computed every validation_step and logged to wandb.
+# Defaults for time horizon and eval timesteps; individual calculators can override.
+max_val: ${plan_len_seconds}
+timesteps_to_compute: [0.5, 1.0, 1.5, 3.0]
+
+validation_metrics:
+  planner_calculators:
+    - _target_: navigators.evaluation.metrics_calculators.ade_calculator.MinADEMetricsCalculator
+      max_val: ${metrics.max_val}
+      timesteps_to_compute: ${metrics.timesteps_to_compute}
+    - _target_: navigators.evaluation.metrics_calculators.ade_calculator.Top1ADEMetricsCalculator
+      max_val: ${metrics.max_val}
+      timesteps_to_compute: ${metrics.timesteps_to_compute}
+    - _target_: navigators.evaluation.metrics_calculators.fde_calculator.MinFDEMetricsCalculator
+    - _target_: navigators.evaluation.metrics_calculators.fde_calculator.Top1FDEMetricsCalculator

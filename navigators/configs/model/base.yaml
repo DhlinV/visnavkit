@@ -1,0 +1,49 @@
+_target_: navigators.arch.models.modular_model.ModularModel
+feat_size: 256
+
+export_cfg:
+  seq_step: ${common.step}
+  seq_len: ${common.seq_length}
+
+loss_cfg:
+  vision_weight: 1
+  policy_weight: 2
+
+modules:
+  vision:
+    _target_: navigators.arch.models.vision_model.VisionModel
+    # NOTE: required to avoid hydra trying to instantiate heads. We don't know the
+    # feature channel count until after construction
+    _recursive_: false
+    backbone_name: fastvit_t8
+    in_chans: 6
+    img_embed_size: 1024
+    img_embed_drop: 0.1
+    pretrained: true
+    p_drop_prev_img: 0.1
+    neck_cfg:
+      n_res_blocks: 2
+      dim: ${model.feat_size}
+      dropout: 0.1
+    loss_pose_weight: 5
+    heads: {}
+
+  policy:
+    _target_: navigators.arch.models.policy_model.PolicyModel
+    summarizer:
+      _target_: navigators.arch.modules.summarizer.Summarizer
+      embed_dim: ${model.feat_size}
+      num_heads: 8
+      ff_dim: 2048
+      seq_len: ${model.export_cfg.seq_len}
+      dropout: 0.1
+      reduction: none
+      mask_p: 0.1
+    plan_head:
+      _target_: navigators.arch.modules.plan_head.PlanHead
+      num_modes: 5
+      num_pts: ${plan_len_points}
+      feat_size: ${model.feat_size}
+      pose_size: 3 # x, y, v
+      dropout: 0.1
+      mode_selection: angle
