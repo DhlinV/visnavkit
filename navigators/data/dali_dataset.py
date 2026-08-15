@@ -7,15 +7,15 @@ import torch
 from nvidia.dali.plugin.base_iterator import LastBatchPolicy
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
 
-from navigators.datasets.dali_img_augmentations import (
+from navigators.data.dali_augmentations import (
     apply_color_jitter,
     apply_crop,
     apply_horizontal_flip,
     apply_jitter,
     apply_warp_perspective,
 )
-from navigators.datasets.file_list import resolve_path, video_files_from_file_list
-from navigators.datasets.pose_targets import dali_pose_target_loader
+from navigators.data.file_list import resolve_path, video_files_from_file_list
+from navigators.data.pose_targets import dali_pose_target_loader
 from navigators.utils.common import build_idxs
 
 NOMINAL_FPS = 20

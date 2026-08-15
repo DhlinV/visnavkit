@@ -31,7 +31,7 @@ class ResBlock(nn.Module):
         return out
 
 
-# TODO(Brad): make it fuseable (something like this)
+# TODO: make it fuseable (something like this)
 # def fuse_resblock_linear_bn(module):
 #     for child in module.children():
 #         if isinstance(child, FusableResBlock):

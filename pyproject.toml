@@ -19,8 +19,13 @@ dependencies = [
   "onnxruntime>=1.20.1",
   "onnxslim>=0.1.43",
   "pytest>=8.4.2",
-  "ruff==0.14.*",  # 0.16 changed default rule selection; match driving-model-track
+  "ruff==0.14.*",  # pinned: 0.16 changed the default rule selection
 ]
+
+[project.scripts]
+navigators-train = "navigators.scripts.train:main"
+navigators-export = "navigators.scripts.export:main"
+navigators-benchmark = "navigators.scripts.benchmark_dataloader:main"
 
 [dependency-groups]
 dev = [
@@ -31,7 +36,7 @@ dev = [
 [tool.uv]
 package = true
 # NOTE: torch 2.13 pins cudnn 9.20, but 9.24 has bug fixes specifically for blackwell gpus
-# when we upgrade to torch 2.14 we can remove this (same as driving-model-track)
+# when we upgrade to torch 2.14 we can remove this
 override-dependencies = [
   "nvidia-cudnn-cu13==9.24.0.43; sys_platform == 'linux'",
 ]

@@ -1,4 +1,4 @@
-_target_: navigators.arch.models.e2e_model.E2EModel
+_target_: navigators.models.e2e_model.E2EModel
 feat_size: 256
 
 export_cfg:
@@ -11,7 +11,7 @@ loss_cfg:
 
 modules:
   vision_encoder:
-    _target_: navigators.arch.models.vision_encoder.VisionEncoder
+    _target_: navigators.models.vision_encoder.VisionEncoder
     # NOTE: required to avoid hydra trying to instantiate heads. We don't know the
     # feature channel count until after construction
     _recursive_: false
@@ -29,9 +29,9 @@ modules:
     heads: {}
 
   action_decoder:
-    _target_: navigators.arch.models.action_decoder.ActionDecoder
+    _target_: navigators.models.action_decoder.ActionDecoder
     summarizer:
-      _target_: navigators.arch.modules.summarizer.Summarizer
+      _target_: navigators.models.layers.summarizer.Summarizer
       embed_dim: ${model.feat_size}
       num_heads: 8
       ff_dim: 2048
@@ -40,7 +40,7 @@ modules:
       reduction: none
       mask_p: 0.1
     plan_head:
-      _target_: navigators.arch.modules.plan_head.PlanHead
+      _target_: navigators.models.heads.plan_head.PlanHead
       num_modes: 5
       num_pts: ${plan_len_points}
       feat_size: ${model.feat_size}

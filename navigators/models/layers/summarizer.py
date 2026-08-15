@@ -9,7 +9,7 @@ import torch.nn as nn
 #     return mask
 
 
-# TOOD(Brad): do per sample instead of across the batch
+# TODO: do per sample instead of across the batch
 def generate_causal_mask(seq_len: int, mask_p: float = 0.0, device=None) -> torch.Tensor:
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -26,7 +26,7 @@ def generate_causal_mask(seq_len: int, mask_p: float = 0.0, device=None) -> torc
     return causal_mask
 
 
-# TODO(Brad) random mask
+# TODO: random mask
 class Summarizer(nn.Module):
     def __init__(
         self,

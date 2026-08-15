@@ -1,6 +1,6 @@
 # Same file_list / window / target semantics as dataset/dali.yaml, but plain torch
 # DataLoader + torchcodec decode on CPU. Augs limited to hflip + color jitter.
-_target_: navigators.datamodules.torch_datamodule.TorchDataModule
+_target_: navigators.data.torch_datamodule.TorchDataModule
 batch_size: 32
 num_workers: 8
 prefetch_factor: 4

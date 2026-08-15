@@ -1,5 +1,5 @@
 from navigators.evaluation.metrics.fde import compute_min_fde, compute_top1_fde
-from navigators.evaluation.metrics_calculators.base_calculator import MetricsCalculatorBase
+from navigators.evaluation.calculators.base_calculator import MetricsCalculatorBase
 
 
 class MinFDEMetricsCalculator(MetricsCalculatorBase):

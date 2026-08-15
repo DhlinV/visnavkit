@@ -1,6 +1,6 @@
 from navigators.evaluation.metrics.ade import compute_min_ade, compute_top1_ade
 from navigators.evaluation.metrics.utils import timestep_key
-from navigators.evaluation.metrics_calculators.base_calculator import MetricsCalculatorBase
+from navigators.evaluation.calculators.base_calculator import MetricsCalculatorBase
 
 
 class MinADEMetricsCalculator(MetricsCalculatorBase):

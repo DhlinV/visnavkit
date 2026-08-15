@@ -2,7 +2,7 @@ import lightning as L
 from nvidia.dali.plugin.base_iterator import LastBatchPolicy
 from omegaconf import DictConfig, OmegaConf
 
-from navigators.datasets.dali import DaliDataset
+from navigators.data.dali_dataset import DaliDataset
 
 
 class DaliDataModule(L.LightningDataModule):

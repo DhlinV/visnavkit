@@ -8,8 +8,8 @@ import torchvision
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 
-from navigators.arch.modules.plan_head import PoseHead
-from navigators.arch.modules.res_block import FusableResBlock
+from navigators.models.heads.plan_head import PoseHead
+from navigators.models.layers.res_block import FusableResBlock
 from navigators.utils.logger import get_logger
 
 logger = get_logger(__name__)

@@ -1,4 +1,4 @@
-_target_: navigators.datamodules.dali_datamodule.DaliDataModule
+_target_: navigators.data.dali_datamodule.DaliDataModule
 last_batch_policy: "drop"
 batch_size: 32
 train_loader:

@@ -2,7 +2,7 @@ import lightning as L
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
-from navigators.datasets.mp4_dataset import Mp4WindowDataset
+from navigators.data.mp4_dataset import Mp4WindowDataset
 
 
 class TorchDataModule(L.LightningDataModule):

@@ -16,7 +16,7 @@ exp_name: baseline
 #
 # Run with:
 #
-#  $ uv run navigators/train.py experiment=<name>
+#  $ uv run python -m navigators.scripts.train experiment=<name>
 #
 # train.yaml is configured s.t. experiment configs have the highest precedence.
 # Keep experiments tracked in git; if one improves the baseline, fold it into train.yaml

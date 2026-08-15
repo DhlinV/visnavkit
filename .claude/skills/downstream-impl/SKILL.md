@@ -20,7 +20,10 @@ description: Implement downstream features in navigators (new heads, datasets, e
 | `frame_speeds` | (B, S, 1) | float32 |
 | `frame_times_s` | (B, S) | float32 |
 
-`dataset=dali` (GPU decode) and `dataset=torch` (torchcodec, CPU) are interchangeable; any new loader must match this dict and the `path label start end` file_list format (`navigators/datasets/file_list.py`). Pose targets come from `navigators/datasets/pose_targets.py` — reuse, never reimplement.
+`dataset=dali` (GPU decode) and `dataset=torch` (torchcodec, CPU) are interchangeable; any new loader must match this dict and the `path label start end` file_list format (`navigators/data/file_list.py`). Pose targets come from `navigators/data/pose_targets.py` — reuse, never reimplement.
+
+### Layout
+`data/` datasets + datamodules · `models/` E2EModel/encoder/decoder + `heads/` `layers/` `losses/` + `lit_model.py` · `evaluation/` metrics + calculators · `scripts/` train/export/smoke_forward/benchmark entry points · `configs/` hydra. New code goes in the matching directory; entry points stay thin (library logic lives outside `scripts/`).
 
 ### Model (E2EModel = VisionEncoder + ActionDecoder)
 - Train forward: `model(x)` with x (B, S, 6, h, w) float in [0,1] → `{"vision": {"pose": ...}, "action": {"plan": {"plans": (B*S, num_modes*(2*num_pts*pose_size+1))}}}`.
@@ -33,11 +36,11 @@ description: Implement downstream features in navigators (new heads, datasets, e
 
 ## Verify before claiming done (in order)
 ```bash
-uv run python -m navigators.smoke_forward model.modules.vision_encoder.pretrained=false  # forward shapes
+uv run python -m navigators.scripts.smoke_forward model.modules.vision_encoder.pretrained=false  # forward shapes
 uv run pytest tests/ -q
 uv run ruff check .
-uv run python -m navigators.benchmark_dataloader --batches 20 common.data_root=<root>  # if loaders touched
-uv run python -m navigators.export checkpoint=<ckpt> output=/tmp/test.onnx            # if model/export touched
+uv run python -m navigators.scripts.benchmark_dataloader --batches 20 common.data_root=<root>  # if loaders touched
+uv run python -m navigators.scripts.export checkpoint=<ckpt> output=/tmp/test.onnx            # if model/export touched
 ```
 Report real shapes/losses from these runs. Then commit, push, and give the exact train command:
-`uv run navigators/train.py experiment=<name> dataset=<dali|torch>`.
+`uv run python -m navigators.scripts.train experiment=<name> dataset=<dali|torch>`.

@@ -1,7 +1,7 @@
 """Benchmark the DALI vs torch dataloaders on the same dataset semantics.
 
 Usage:
-    uv run python -m navigators.benchmark_dataloader [--datasets dali torch] [--warmup 5] [--batches 50] \
+    uv run python -m navigators.scripts.benchmark_dataloader [--datasets dali torch] [--warmup 5] [--batches 50] \
         [hydra overrides, e.g. common.data_root=/data/nav_clips dataset.batch_size=32]
 
 Overrides are applied to every benchmarked dataset config. Throughput for the torch loader

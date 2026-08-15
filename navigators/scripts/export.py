@@ -13,7 +13,7 @@ from omegaconf import DictConfig
 from onnxruntime.transformers import float16
 from torch.nn.utils.fusion import fuse_linear_bn_eval
 
-from navigators.train import LitModel
+from navigators.models.lit_model import LitModel
 from navigators.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -90,7 +90,7 @@ def print_sanity_check(model_path, plan_head, x, fb):
     print(f"best_plan pN: {np.round(parsed_output['best_plan'][-1], 2)}")
 
 
-@hydra.main(version_base=None, config_path="configs", config_name="export")
+@hydra.main(version_base=None, config_path="../configs", config_name="export")
 def main(cfg: DictConfig):
     # self-attention on frozen params would take MHA's fused fast path, whose
     # aten::_native_multi_head_attention op the ONNX tracer cannot export

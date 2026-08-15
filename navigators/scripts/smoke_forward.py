@@ -1,6 +1,6 @@
 """Forward smoke test on random inputs, shapes derived from the experiment config.
 
-    uv run python -m navigators.smoke_forward [experiment]  # default: base model, no experiment
+    uv run python -m navigators.scripts.smoke_forward [experiment]  # default: base model, no experiment
 """
 
 import sys
@@ -10,9 +10,9 @@ from hydra import compose, initialize
 from hydra.utils import instantiate
 
 # args are hydra overrides (a bare first arg means experiment=<arg>), e.g.
-#   uv run python -m navigators.smoke_forward experiment=baseline model=base
+#   uv run python -m navigators.scripts.smoke_forward experiment=baseline model=base
 overrides = [a if "=" in a else f"experiment={a}" for a in sys.argv[1:]]
-with initialize(version_base=None, config_path="configs"):
+with initialize(version_base=None, config_path="../configs"):
     cfg = compose(config_name="train", overrides=overrides)
 
 B, S = 2, cfg.common.seq_length

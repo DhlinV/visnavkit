@@ -3,8 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from navigators.arch.modules.res_block import FusableResBlock
-from navigators.losses.laplace_nll_loss import LaplaceNLLLoss
+from navigators.models.layers.res_block import FusableResBlock
+from navigators.models.losses.laplace_nll_loss import LaplaceNLLLoss
 from navigators.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -30,7 +30,7 @@ class PoseHead(nn.Module):
 
 
 class PlanHead(nn.Module):
-    """MHP plan head ported from driving-model-track, minus the bev/offsidewalk loss branch."""
+    """Multi-hypothesis (MHP) plan head: per-mode trajectory regression + mode classification."""
 
     def __init__(
         self,

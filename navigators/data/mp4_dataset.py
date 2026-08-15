@@ -6,8 +6,8 @@ import torchvision.transforms.v2 as v2
 from torch.utils.data import Dataset
 from torchcodec.decoders import VideoDecoder
 
-from navigators.datasets.file_list import parse_file_list_frame_ranges, resolve_path
-from navigators.datasets.pose_targets import get_current_frame_idxs, get_future_poses_from_dir
+from navigators.data.file_list import parse_file_list_frame_ranges, resolve_path
+from navigators.data.pose_targets import get_current_frame_idxs, get_future_poses_from_dir
 from navigators.utils.common import build_idxs, load_npy
 
 NOMINAL_FPS = 20
