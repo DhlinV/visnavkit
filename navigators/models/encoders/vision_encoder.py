@@ -43,6 +43,8 @@ class VisionEncoder(nn.Module):
         heads: DictConfig = DictConfig({}),
         weights: str | None = None,
         loss_pose_weight=1,
+        out_indices=(1, 2, 3),
+        act_layer: str | None = "gelu_tanh",
     ):
         super().__init__()
 
@@ -52,16 +54,20 @@ class VisionEncoder(nn.Module):
         self.p_drop_prev_img = p_drop_prev_img
 
         # backbone
-        self.backbone = timm.create_model(
-            backbone_name,
+        backbone_kwargs = dict(
             pretrained=pretrained,
             in_chans=in_chans,
             num_classes=0,
             global_pool="",
-            act_layer=partial(nn.GELU, approximate="tanh"),
             features_only=True,
-            out_indices=(1, 2, 3),
+            out_indices=tuple(out_indices),
         )
+        # act_layer=null keeps the backbone's native activations (required for pretrained CNNs)
+        if act_layer == "gelu_tanh":
+            backbone_kwargs["act_layer"] = partial(nn.GELU, approximate="tanh")
+        elif act_layer is not None:
+            raise ValueError(f"Unsupported {act_layer=}")
+        self.backbone = timm.create_model(backbone_name, **backbone_kwargs)
         data_config = timm.data.resolve_model_data_config(self.backbone)
         self.normalize_frame_transform = torchvision.transforms.Normalize(
             mean=data_config["mean"], std=data_config["std"]

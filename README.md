@@ -23,10 +23,11 @@ navigators/
 ├── configs/       # hydra configs (dataset/, model/, optimizer/, metrics/, experiment/)
 ├── data/          # datasets + lightning datamodules (DALI and torch loaders)
 ├── models/        # E2EModel, ActionDecoder, LitModel
-│   ├── encoders/  # vision encoders (timm-backbone default; add new encoders here)
-│   ├── heads/     # plan_head (MHP), pose_head; add new heads here
-│   ├── layers/    # summarizer, res blocks
-│   └── losses/    # laplace NLL
+│   ├── encoders/     # vision encoders (timm backbone, DINOv2/v3)
+│   ├── summarizers/  # temporal fusion over the frame sequence
+│   ├── heads/        # plan heads (MHP, waypoint, diffusion), pose_head
+│   ├── layers/       # res blocks
+│   └── losses/       # laplace NLL
 ├── evaluation/    # metrics + metric calculators (ADE/FDE)
 ├── scripts/       # entry points: train, export, smoke_forward, benchmark_dataloader
 └── utils/
@@ -54,6 +55,25 @@ uv run python -m navigators.scripts.benchmark_dataloader --batches 50 common.dat
 uv run python -m navigators.scripts.train experiment=<name>   # needs a dataset config first
 uv run python -m navigators.scripts.export checkpoint=<ckpt> output=<out.onnx>
 ```
+
+## Model zoo
+
+Recipes in `configs/model/` compose a vision encoder, a temporal summarizer, and a plan
+head via hydra `_target_` overrides — select one with `model=<recipe>`. The reference-work
+recipes are adaptations to this repo's goal-free, fixed-horizon data contract, not
+reproductions.
+
+| recipe | encoder | summarizer | head |
+|---|---|---|---|
+| `base` | FastViT-T8 | causal transformer ×1 | MHP (Laplace NLL) |
+| `gnm` | MobileNetV2 | none | waypoint regression |
+| `vint` | EfficientNet-B0 | transformer ×4 | waypoint regression |
+| `nomad` | EfficientNet-B0 | transformer ×4 | diffusion policy |
+| `citywalker` | DINOv2 ViT-S (frozen) | transformer ×4 | waypoint regression |
+| `s2e` | DINOv3 ViT-S (frozen) | causal transformer ×1 | MHP |
+| `mimic` | = base | = base | = base |
+| `dinov2` / `dinov3` | DINO ViT-S (frozen) | = base | = base |
+| `diffusion` | = base | = base | diffusion policy |
 
 ## Reference works
 

@@ -1,3 +1,4 @@
+import pytest
 import torch
 from hydra import compose, initialize_config_module
 from hydra.utils import instantiate
@@ -31,6 +32,26 @@ def test_base_model_forward():
 def test_dinov3_encoder_forward():
     cfg, _, _, y = _forward(["model=dinov3"])
     _assert_shapes(cfg, y)
+
+
+@pytest.mark.parametrize("model", ["gnm", "vint", "nomad", "citywalker", "s2e", "mimic"])
+def test_zoo_recipe_forward(model):
+    cfg, _, _, y = _forward([f"model={model}"])
+    _assert_shapes(cfg, y)
+
+
+def test_waypoint_head_loss():
+    cfg, model, x, _ = _forward(["model=gnm"])
+    model.train()
+    y = model(x)
+    B_S = y["vision"]["pose"].shape[0]
+    targets = dict(
+        vision=dict(frame_speeds=torch.rand(B_S, 1)),
+        action=dict(future_poses=torch.rand(B_S, cfg.plan_len_points, 3)),
+    )
+    loss_dict, _ = model.get_losses(y, targets)
+    assert torch.isfinite(loss_dict["loss"])
+    assert loss_dict["action_cls"] == 0
 
 
 def test_diffusion_plan_head():

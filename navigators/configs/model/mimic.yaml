@@ -1,0 +1,7 @@
+# MIMIC recipe (arXiv:2603.22527): FastViT frame-pair encoder + causal transformer
+# summarizer + multi-hypothesis plan head — identical to the base recipe. Multi-scale
+# imitation and corrective behavior expansion are data/training strategies, not
+# architecture changes.
+defaults:
+  - base
+  - _self_

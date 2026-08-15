@@ -1,0 +1,6 @@
+# S2E-style recipe (arXiv:2507.22028): ViT foundation encoder (frozen DINOv3) with a
+# multi-hypothesis plan head. The paper's RL post-training stage is out of scope here —
+# this covers the imitation-learning backbone/head only.
+defaults:
+  - dinov3
+  - _self_

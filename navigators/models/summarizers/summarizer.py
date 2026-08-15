@@ -38,6 +38,7 @@ class Summarizer(nn.Module):
         reduction="last",
         mask_p=0.5,
         route_embed_dim=0,
+        num_layers=1,
     ):
         super().__init__()
         self.seq_len = seq_len
@@ -46,11 +47,15 @@ class Summarizer(nn.Module):
 
         model_dim = embed_dim + route_embed_dim
 
+        # num_layers=0 -> no temporal mixing at all (per-frame passthrough + reduction)
+        if num_layers == 0:
+            self.tformer = None
+            return
+
         # Learnable positional embeddings
         self.pos_embedding = nn.Embedding(seq_len, model_dim)
 
-        # Transformer Encoder Layer
-        self.tformer = nn.TransformerEncoderLayer(
+        layer = nn.TransformerEncoderLayer(
             d_model=model_dim,
             nhead=num_heads,
             dim_feedforward=ff_dim,
@@ -59,17 +64,20 @@ class Summarizer(nn.Module):
             batch_first=True,  # Input shape: (batch_size, seq_len, embed_dim)
             norm_first=True,  # Layer normalization before other operations
         )
+        # single layer stays unwrapped to keep existing checkpoint state_dict keys
+        self.tformer = layer if num_layers == 1 else nn.TransformerEncoder(layer, num_layers, enable_nested_tensor=False)
 
     def forward(self, x):
         b, s, e = x.shape
 
-        # pos embed
-        positions = self.pos_embedding(torch.arange(s, device=x.device))[None, :, :].expand(b, s, e)
-        x = x + positions
+        if self.tformer is not None:
+            # pos embed
+            positions = self.pos_embedding(torch.arange(s, device=x.device))[None, :, :].expand(b, s, e)
+            x = x + positions
 
-        # tformer
-        mask = generate_causal_mask(self.seq_len, mask_p=self.mask_p if self.training else 0, device=x.device)
-        x = self.tformer(x, src_mask=mask if self.reduction == "none" else None)
+            # tformer (positional mask arg: src_mask for a single layer, mask for a stack)
+            mask = generate_causal_mask(self.seq_len, mask_p=self.mask_p if self.training else 0, device=x.device)
+            x = self.tformer(x, mask if self.reduction == "none" else None)
 
         # reduction over time dimension
         if self.reduction == "last":

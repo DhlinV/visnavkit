@@ -23,7 +23,7 @@ description: Implement downstream features in navigators (new heads, datasets, e
 `dataset=dali` (GPU decode) and `dataset=torch` (torchcodec, CPU) are interchangeable; any new loader must match this dict and the `path label start end` file_list format (`navigators/data/file_list.py`). Pose targets come from `navigators/data/pose_targets.py` — reuse, never reimplement.
 
 ### Layout
-`data/` datasets + datamodules · `models/` E2EModel/decoder + `encoders/` `heads/` `layers/` `losses/` + `lit_model.py` · `evaluation/` metrics + calculators · `scripts/` train/export/smoke_forward/benchmark entry points · `configs/` hydra. One file per encoder/head variant, swapped via `_target_` in the model config. New code goes in the matching directory; entry points stay thin (library logic lives outside `scripts/`).
+`data/` datasets + datamodules · `models/` E2EModel/decoder + `encoders/` `summarizers/` `heads/` `layers/` `losses/` + `lit_model.py` · `evaluation/` metrics + calculators · `scripts/` train/export/smoke_forward/benchmark entry points · `configs/` hydra. One file per encoder/summarizer/head variant, swapped via `_target_` in a `configs/model/<recipe>.yaml` (see /model-zoo). New code goes in the matching directory; entry points stay thin (library logic lives outside `scripts/`).
 
 ### Model (E2EModel = VisionEncoder + ActionDecoder)
 - Train forward: `model(x)` with x (B, S, 6, h, w) float in [0,1] → `{"vision": {"pose": ...}, "action": {"plan": {"plans": (B*S, num_modes*(2*num_pts*pose_size+1))}}}`.

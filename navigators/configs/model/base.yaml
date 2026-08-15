@@ -31,7 +31,7 @@ modules:
   action_decoder:
     _target_: navigators.models.action_decoder.ActionDecoder
     summarizer:
-      _target_: navigators.models.layers.summarizer.Summarizer
+      _target_: navigators.models.summarizers.summarizer.Summarizer
       embed_dim: ${model.feat_size}
       num_heads: 8
       ff_dim: 2048
