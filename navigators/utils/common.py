@@ -1,4 +1,13 @@
+from pathlib import Path
+
 import numpy as np
+
+
+def load_npy(file: Path, mmap_mode: str | None = "r"):
+    file = Path(file)
+    if not file.exists():
+        raise FileNotFoundError(f"File not found: {file}")
+    return np.load(file, mmap_mode=mmap_mode)
 
 
 def build_idxs(max_val: float, size: int):

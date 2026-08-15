@@ -26,12 +26,16 @@ trainer:
     ckpt_path: null
 
 common:
+  crop_xy: [0, 0]
   crop_wh: [640, 480]
   downscale_factor: 2
   seq_length: 10
   step: 1
+  use_full_pose: true  # pose_size 3 in model/base.yaml -> (x, y, v) targets
 
   plan_len_seconds: ${plan_len_seconds}
   plan_len_points: ${plan_len_points}
+  # true: t_anchors = build_idxs(plan_len_seconds, plan_len_points + 1)[1:] (no t=0 anchor)
+  offset_t_anchors: false
 
   data_root: /data/nav_clips  # placeholder until the first dataset lands

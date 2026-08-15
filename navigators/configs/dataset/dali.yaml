@@ -1,0 +1,66 @@
+_target_: navigators.datamodules.dali_datamodule.DaliDataModule
+last_batch_policy: "drop"
+batch_size: 32
+train_loader:
+  base_seed: ${seed}
+  data_root: ${common.data_root}
+  file_list: train.txt
+  seq_len: ${common.seq_length}
+  num_threads: 8
+  n_streams: 4
+  # frame_step is the gap inside each stacked pair, in source-video frames.
+  # seq_step is the gap between stacked pairs, measured after applying frame_step.
+  # Examples:
+  #   frame_step=1, seq_step=1 -> (0, 1), (1, 2), (2, 3)
+  #   frame_step=2, seq_step=1 -> (0, 2), (2, 4), (4, 6)
+  #   frame_step=1, seq_step=2 -> (0, 1), (2, 3), (4, 5)
+  frame_step: 1
+  seq_step: ${common.step}
+  steps_between_samples: 20
+  plan_len_seconds: ${common.plan_len_seconds}
+  plan_len_points: ${common.plan_len_points}
+  offset_t_anchors: ${common.offset_t_anchors}
+  use_full_pose: ${common.use_full_pose}
+  crop_xy: ${common.crop_xy}
+  crop_wh: ${common.crop_wh}
+  downscale_factor: ${common.downscale_factor}
+  use_augs: true
+  p_hflip: 0.5
+  use_warp_perspective: false
+  p_warp_perspective: 0.5
+  use_jitter: false
+  p_jitter: 0.5
+  color_jitter_brightness: 0.2
+  color_jitter_contrast: 0.2
+  color_jitter_saturation: 0.2
+  color_jitter_hue: 0.1
+  shuffle: true
+
+val_loader:
+  base_seed: ${seed}
+  data_root: ${common.data_root}
+  file_list: val.txt
+  seq_len: ${common.seq_length}
+  num_threads: 8
+  n_streams: 4
+  frame_step: 1
+  seq_step: ${common.step}
+  steps_between_samples: 20
+  plan_len_seconds: ${common.plan_len_seconds}
+  plan_len_points: ${common.plan_len_points}
+  offset_t_anchors: ${common.offset_t_anchors}
+  use_full_pose: ${common.use_full_pose}
+  crop_xy: ${common.crop_xy}
+  crop_wh: ${common.crop_wh}
+  downscale_factor: ${common.downscale_factor}
+  use_augs: false
+  p_hflip: 0.0
+  use_warp_perspective: false
+  p_warp_perspective: 0.0
+  use_jitter: false
+  p_jitter: 0.0
+  color_jitter_brightness: 0.0
+  color_jitter_contrast: 0.0
+  color_jitter_saturation: 0.0
+  color_jitter_hue: 0.0
+  shuffle: false

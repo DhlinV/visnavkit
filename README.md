@@ -23,6 +23,15 @@ uv run python -m navigators.smoke_forward
 uv run pytest tests/
 ```
 
+## Dataloaders
+
+Two interchangeable datamodules over the same `path label start end` file_list format:
+`dataset=dali` (GPU decode, NVIDIA DALI) and `dataset=torch` (CPU decode, torchcodec).
+
+```bash
+uv run python -m navigators.benchmark_dataloader --batches 50 common.data_root=/data/nav_clips
+```
+
 ## Train / export
 
 ```bash

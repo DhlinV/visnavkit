@@ -11,6 +11,8 @@ dependencies = [
   "omegaconf>=2.3.0",
   "torch==2.13.0",
   "torchvision>=0.24.0",
+  "torchcodec>=0.10",
+  "nvidia-dali-cuda130~=1.53.0; sys_platform == 'linux'",
   "lightning>=2.6.1",
   "wandb>=0.26.0",
   "onnx>=1.17.0",
