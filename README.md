@@ -65,7 +65,7 @@ Navigation foundation models and imitation learning:
 - **CityWalker**: Learning Embodied Urban Navigation from Web-Scale Videos (CVPR 2025) — [code](https://github.com/ai4ce/CityWalker)
 - **S2E**: From Seeing to Experiencing: Scaling Navigation Foundation Models with Reinforcement Learning — [arXiv:2507.22028](https://arxiv.org/abs/2507.22028), [project](https://vail-ucla.github.io/S2E/)
 - **NWM**: Navigation World Models (CVPR 2025) — [arXiv:2412.03572](https://arxiv.org/abs/2412.03572)
-- **mimic-video**: Video-Action Models for Generalizable Robot Control Beyond VLAs — [arXiv:2512.15692](https://arxiv.org/abs/2512.15692), [code](https://github.com/mimic-video/mimic-video)
+- **MIMIC**: Learning Sidewalk Autopilot from Multi-Scale Imitation with Corrective Behavior Expansion (ICRA 2026) — [arXiv:2603.22527](https://arxiv.org/abs/2603.22527)
 
 Simulation and benchmarks for urban micromobility:
 
