@@ -11,7 +11,7 @@ loss_cfg:
 
 modules:
   vision_encoder:
-    _target_: navigators.models.vision_encoder.VisionEncoder
+    _target_: navigators.models.encoders.vision_encoder.VisionEncoder
     # NOTE: required to avoid hydra trying to instantiate heads. We don't know the
     # feature channel count until after construction
     _recursive_: false

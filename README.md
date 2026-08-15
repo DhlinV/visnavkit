@@ -22,8 +22,9 @@ Configs ship inside the package (`navigators.configs`), so hydra composition wor
 navigators/
 ├── configs/       # hydra configs (dataset/, model/, optimizer/, metrics/, experiment/)
 ├── data/          # datasets + lightning datamodules (DALI and torch loaders)
-├── models/        # E2EModel, VisionEncoder, ActionDecoder, LitModel
-│   ├── heads/     # plan/pose heads
+├── models/        # E2EModel, ActionDecoder, LitModel
+│   ├── encoders/  # vision encoders (timm-backbone default; add new encoders here)
+│   ├── heads/     # plan_head (MHP), pose_head; add new heads here
 │   ├── layers/    # summarizer, res blocks
 │   └── losses/    # laplace NLL
 ├── evaluation/    # metrics + metric calculators (ADE/FDE)
