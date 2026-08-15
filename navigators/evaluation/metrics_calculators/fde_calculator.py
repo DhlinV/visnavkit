@@ -16,7 +16,7 @@ class MinFDEMetricsCalculator(MetricsCalculatorBase):
         pass
 
     def calculate(self, preds: dict, targets: dict) -> dict[str, float]:
-        gt_poses = targets["policy"]["future_poses"]
+        gt_poses = targets["action"]["future_poses"]
         return {self.name: compute_min_fde(preds, gt_poses)}
 
 
@@ -30,5 +30,5 @@ class Top1FDEMetricsCalculator(MetricsCalculatorBase):
         pass
 
     def calculate(self, preds: dict, targets: dict) -> dict[str, float]:
-        gt_poses = targets["policy"]["future_poses"]
+        gt_poses = targets["action"]["future_poses"]
         return {self.name: compute_top1_fde(preds, gt_poses)}

@@ -22,10 +22,10 @@ description: Implement downstream features in navigators (new heads, datasets, e
 
 `dataset=dali` (GPU decode) and `dataset=torch` (torchcodec, CPU) are interchangeable; any new loader must match this dict and the `path label start end` file_list format (`navigators/datasets/file_list.py`). Pose targets come from `navigators/datasets/pose_targets.py` — reuse, never reimplement.
 
-### Model
-- Train forward: `model(x)` with x (B, S, 6, h, w) float in [0,1] → `{"vision": {"pose": ...}, "policy": {"plan": {"plans": (B*S, num_modes*(2*num_pts*pose_size+1))}}}`.
+### Model (E2EModel = VisionEncoder + ActionDecoder)
+- Train forward: `model(x)` with x (B, S, 6, h, w) float in [0,1] → `{"vision": {"pose": ...}, "action": {"plan": {"plans": (B*S, num_modes*(2*num_pts*pose_size+1))}}}`.
 - Export forward: `model(x, fb=...)` single frame + feature buffer → tuple `(plan, pose, feat_out, *head_outputs)`; keep `get_export_output_names()` in sync.
-- New heads: add to `VisionModel.heads` ModuleDict or as a `PlanHead`-style module; wire losses through `ModularModel.get_losses` (vision_weight/policy_weight).
+- New heads: add to `VisionEncoder.heads` ModuleDict or as a `PlanHead`-style module; wire losses through `E2EModel.get_losses` (vision_weight/action_weight).
 
 ### Configs
 - Experiments are self-contained `# @package _global_` files in `configs/experiment/` — copy `baseline.yaml`, keep ALL overrides there, never edit recipe files (model/optimizer/dataset yamls).
@@ -33,7 +33,7 @@ description: Implement downstream features in navigators (new heads, datasets, e
 
 ## Verify before claiming done (in order)
 ```bash
-uv run python -m navigators.smoke_forward model.modules.vision.pretrained=false  # forward shapes
+uv run python -m navigators.smoke_forward model.modules.vision_encoder.pretrained=false  # forward shapes
 uv run pytest tests/ -q
 uv run ruff check .
 uv run python -m navigators.benchmark_dataloader --batches 20 common.data_root=<root>  # if loaders touched

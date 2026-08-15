@@ -26,7 +26,7 @@ class MinADEMetricsCalculator(MetricsCalculatorBase):
         return self._timesteps
 
     def calculate(self, preds: dict, targets: dict) -> dict[str, float]:
-        gt_poses = targets["policy"]["future_poses"]
+        gt_poses = targets["action"]["future_poses"]
         values = compute_min_ade(
             preds,
             gt_poses,
@@ -59,7 +59,7 @@ class Top1ADEMetricsCalculator(MetricsCalculatorBase):
         return self._timesteps
 
     def calculate(self, preds: dict, targets: dict) -> dict[str, float]:
-        gt_poses = targets["policy"]["future_poses"]
+        gt_poses = targets["action"]["future_poses"]
         values = compute_top1_ade(
             preds,
             gt_poses,

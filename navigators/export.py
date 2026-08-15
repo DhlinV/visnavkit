@@ -98,7 +98,7 @@ def main(cfg: DictConfig):
 
     # None means we make a prediction for each token coming out of the summarizer. This is a training only hack
     # For deployment, we just want a prediction for the last token
-    summarizer = cfg.model.modules.policy.get("summarizer")
+    summarizer = cfg.model.modules.action_decoder.get("summarizer")
     if summarizer is not None and summarizer.reduction == "none":
         summarizer.reduction = "last"
 
@@ -111,14 +111,14 @@ def main(cfg: DictConfig):
     model = lmodel.model
     infer_model = reparameterize_model(model)
     # drop configured heads the model doesn't have
-    export_heads = [name for name in cfg.export_heads if name in infer_model.vision_model.heads]
+    export_heads = [name for name in cfg.export_heads if name in infer_model.vision_encoder.heads]
     infer_model.export_heads = export_heads
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     infer_model = infer_model.to(device)
 
     # pull out parameters from config
-    input_channels = cfg.model.modules.vision.in_chans
+    input_channels = cfg.model.modules.vision_encoder.in_chans
     img_w = int(cfg.common.crop_wh[0] // cfg.common.downscale_factor)
     img_h = int(cfg.common.crop_wh[1] // cfg.common.downscale_factor)
 
@@ -174,7 +174,7 @@ def main(cfg: DictConfig):
     onnx.save(model_onnx, output_filepath)
 
     # load model and output values for comparison testing
-    print_sanity_check(output_filepath, infer_model.policy_model.plan_head, x, fb)
+    print_sanity_check(output_filepath, infer_model.action_decoder.plan_head, x, fb)
 
 
 if __name__ == "__main__":

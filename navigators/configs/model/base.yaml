@@ -1,4 +1,4 @@
-_target_: navigators.arch.models.modular_model.ModularModel
+_target_: navigators.arch.models.e2e_model.E2EModel
 feat_size: 256
 
 export_cfg:
@@ -7,11 +7,11 @@ export_cfg:
 
 loss_cfg:
   vision_weight: 1
-  policy_weight: 2
+  action_weight: 2
 
 modules:
-  vision:
-    _target_: navigators.arch.models.vision_model.VisionModel
+  vision_encoder:
+    _target_: navigators.arch.models.vision_encoder.VisionEncoder
     # NOTE: required to avoid hydra trying to instantiate heads. We don't know the
     # feature channel count until after construction
     _recursive_: false
@@ -28,8 +28,8 @@ modules:
     loss_pose_weight: 5
     heads: {}
 
-  policy:
-    _target_: navigators.arch.models.policy_model.PolicyModel
+  action_decoder:
+    _target_: navigators.arch.models.action_decoder.ActionDecoder
     summarizer:
       _target_: navigators.arch.modules.summarizer.Summarizer
       embed_dim: ${model.feat_size}

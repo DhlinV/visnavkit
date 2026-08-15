@@ -2,7 +2,9 @@ import torch
 import torch.nn as nn
 
 
-class PolicyModel(nn.Module):
+class ActionDecoder(nn.Module):
+    """Temporal fusion (summarizer) over per-frame vision tokens -> multi-hypothesis plan head."""
+
     def __init__(self, summarizer, plan_head):
         super().__init__()
         self.summarizer = summarizer
@@ -27,13 +29,12 @@ class PolicyModel(nn.Module):
             nn.init.normal_(m.weight, mean=0.0, std=0.02)
 
     def forward(self, x):
-        B, F, D = x.shape
-        x = self.summarizer(x)  # [B, F, feat_size] -> [B, F, feat_size]
+        x = self.summarizer(x)  # [B, F, feat_size] -> [B, F, feat_size] (or [B, feat_size] if reduced)
         # if summarizer made a prediction for each token, convert it to a batch
-        if len(x.shape) == 3:
-            x = x.view((B * F, D))  # [B, F, feat_size] -> [B * F, feat_size]
+        if x.dim() == 3:
+            x = x.flatten(0, 1)  # [B, F, feat_size] -> [B * F, feat_size]
 
-        plan_out = self.plan_head(x)  # [B * F, feat_size] -> [B*F, plan_out_size]
+        plan_out = self.plan_head(x)  # [B * F, feat_size] -> [B * F, plan_out_size]
         return dict(plan=plan_out)
 
     def get_losses(self, preds, targets):

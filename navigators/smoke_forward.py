@@ -19,10 +19,10 @@ B, S = 2, cfg.common.seq_length
 w, h = (d // cfg.common.downscale_factor for d in cfg.common.crop_wh)
 
 model = instantiate(cfg.model).eval()
-x = torch.rand(B, S, cfg.model.modules.vision.in_chans, h, w)
+x = torch.rand(B, S, cfg.model.modules.vision_encoder.in_chans, h, w)
 with torch.no_grad():
     y = model(x)
 
 print(f"{cfg.exp_name}: x {tuple(x.shape)}")
-print("plan:", {k: tuple(v.shape) for k, v in y["policy"]["plan"].items()})
+print("plan:", {k: tuple(v.shape) for k, v in y["action"]["plan"].items()})
 print("pose:", tuple(y["vision"]["pose"].shape))

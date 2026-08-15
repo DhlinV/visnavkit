@@ -1,5 +1,3 @@
-from typing import Dict, List
-
 import torch
 import torch.nn as nn
 from omegaconf import DictConfig
@@ -9,25 +7,30 @@ from navigators.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-class ModularModel(nn.Module):
-    """Policy wrapped with vision. Pass ``modules`` as ``{vision, policy}`` (Hydra config).
-    An optional ``route_encoder`` module conditions the policy on a goal/route patch."""
+def _detach(v):
+    return v.detach() if isinstance(v, torch.Tensor) else v
+
+
+class E2EModel(nn.Module):
+    """Vision encoder + temporal action decoder. Pass ``modules`` as
+    ``{vision_encoder, action_decoder}`` (Hydra config). An optional ``route_encoder``
+    module conditions the action decoder on a goal/route patch."""
 
     def __init__(
         self,
-        modules: Dict[str, nn.Module],
-        feat_size,
+        modules: dict[str, nn.Module],
+        feat_size: int,
         loss_cfg: DictConfig,
         export_cfg: DictConfig,
-        frozen_modules: List[str] | None = None,
-        trainable_modules: List[str] | None = None,
+        frozen_modules: list[str] | None = None,
+        trainable_modules: list[str] | None = None,
         route_drop_p: float = 0.0,
     ):
         super().__init__()
         self.loss_cfg = loss_cfg
         self.feat_size = feat_size
-        self.vision_model = modules["vision"]
-        self.policy_model = modules["policy"]
+        self.vision_encoder = modules["vision_encoder"]
+        self.action_decoder = modules["action_decoder"]
         self.route_encoder = modules.get("route_encoder")
         self.route_drop_p = route_drop_p
 
@@ -41,21 +44,16 @@ class ModularModel(nn.Module):
         if self._trainable_modules:
             self.train(True)
 
-    def _configure_trainable_modules(self, frozen_modules: List[str]) -> None:
+    def _configure_trainable_modules(self, frozen_modules: list[str]) -> None:
         if self._trainable_modules:
             logger.warning(
-                f"Modules {self._trainable_modules} were set to be trainable. Freezing all other modules \
-                           regardless of explicitly set frozen modules: {frozen_modules}"
+                f"Modules {self._trainable_modules} were set to be trainable. Freezing all other modules "
+                f"regardless of explicitly set frozen modules: {frozen_modules}"
             )
             for name, p in self.named_parameters():
-                # fuzzy name matching (eg vision_model.head.x matches vision_model.head.x.fpn, etc)
-                if any(trainable in name for trainable in self._trainable_modules):
-                    p.requires_grad = True
-                else:
-                    p.requires_grad = False
-
+                # fuzzy name matching (eg vision_encoder.head.x matches vision_encoder.head.x.fpn, etc)
+                p.requires_grad = any(trainable in name for trainable in self._trainable_modules)
         else:
-            # Backwards compatibility: freeze any layers that need freezing
             for frozen_module in frozen_modules:
                 mod = getattr(self, frozen_module, None)
                 if mod is None:
@@ -75,9 +73,9 @@ class ModularModel(nn.Module):
                     module.train(True)
         return self
 
-    def _append_route_embeddings(self, policy_input: torch.Tensor, route_patch: torch.Tensor | None) -> torch.Tensor:
+    def _append_route_embeddings(self, decoder_input: torch.Tensor, route_patch: torch.Tensor | None) -> torch.Tensor:
         if self.route_encoder is None:
-            return policy_input
+            return decoder_input
         if route_patch is None:
             raise ValueError("route_patch is required when model.modules.route_encoder is configured.")
 
@@ -88,49 +86,44 @@ class ModularModel(nn.Module):
             keep = torch.rand(route_patch.shape[0], 1, 1, 1, device=route_patch.device) >= self.route_drop_p
             route_patch = route_patch * keep
         route_embeddings = self.route_encoder(route_patch)
-        return torch.cat([policy_input, route_embeddings], dim=-1)
+        return torch.cat([decoder_input, route_embeddings], dim=-1)
 
     def forward(self, x, fb=None, route_patch=None):
         # Training: full sequence of frames
         if fb is None:
             B, F, C, H, W = x.shape
-            x = x.view((B * F, C, H, W))
-            vision_outputs = self.vision_model(x)
-            vision_feats = vision_outputs["feat_out"]
-            policy_input = vision_feats.view((B, F, self.feat_size))
-            policy_input = self._append_route_embeddings(policy_input, route_patch)
-            policy_outputs = self.policy_model(policy_input)
-            return dict(vision=vision_outputs, policy=policy_outputs)
+            vision_outputs = self.vision_encoder(x.view(B * F, C, H, W))
+            decoder_input = vision_outputs["feat_out"].view(B, F, self.feat_size)
+            decoder_input = self._append_route_embeddings(decoder_input, route_patch)
+            action_outputs = self.action_decoder(decoder_input)
+            return dict(vision=vision_outputs, action=action_outputs)
 
         # Export: single frame + feature buffer
-        B, C, H, W = x.shape
-        vision_outputs = self.vision_model(x, export_heads=self.export_heads)
-        gathered_fb = fb[:, self.feature_idxs, :]
-        vision_feats = vision_outputs["feat_out"]
-        current_token = vision_feats.reshape(B, 1, self.feat_size)
-        policy_input = torch.cat([gathered_fb, current_token], dim=1)
-        policy_input = self._append_route_embeddings(policy_input, route_patch)
-        plan_output = self.policy_model(policy_input)["plan"]["plans"]
+        B = x.shape[0]
+        vision_outputs = self.vision_encoder(x, export_heads=self.export_heads)
+        current_token = vision_outputs["feat_out"].reshape(B, 1, self.feat_size)
+        decoder_input = torch.cat([fb[:, self.feature_idxs, :], current_token], dim=1)
+        decoder_input = self._append_route_embeddings(decoder_input, route_patch)
+        plan_output = self.action_decoder(decoder_input)["plan"]["plans"]
         head_outputs = tuple(
-            vision_outputs[name] for name in self.vision_model.get_head_output_names(self.export_heads)
+            vision_outputs[name] for name in self.vision_encoder.get_head_output_names(self.export_heads)
         )
         return (plan_output, vision_outputs["pose"], current_token.flatten(1), *head_outputs)
 
     def get_export_output_names(self) -> list[str]:
         output_names = ["plan", "pose", "feat_out"]
-        output_names.extend(self.vision_model.get_head_output_names(self.export_heads))
+        output_names.extend(self.vision_encoder.get_head_output_names(self.export_heads))
         return output_names
 
     def get_losses(self, preds, targets):
-        vision_loss_dict = self.vision_model.get_losses(preds["vision"], targets["vision"])
-        policy_loss_dict, policy_loss_debug = self.policy_model.get_losses(preds["policy"], targets["policy"])
+        vision_loss_dict = self.vision_encoder.get_losses(preds["vision"], targets["vision"])
+        action_loss_dict, action_loss_debug = self.action_decoder.get_losses(preds["action"], targets["action"])
         total_loss = (
             self.loss_cfg.vision_weight * vision_loss_dict["total"]
-            + self.loss_cfg.policy_weight * policy_loss_dict["total"]
+            + self.loss_cfg.action_weight * action_loss_dict["total"]
         )
         loss_dict = dict(loss=total_loss)
-        maybe_detach = lambda v: v.detach() if isinstance(v, torch.Tensor) else v  # noqa: E731
-        loss_dict.update({f"vision_{k}": maybe_detach(v) for k, v in vision_loss_dict.items()})
-        loss_dict.update({f"policy_{k}": maybe_detach(v) for k, v in policy_loss_dict.items()})
-        loss_debug = dict(policy_loss_debug=policy_loss_debug)
+        loss_dict.update({f"vision_{k}": _detach(v) for k, v in vision_loss_dict.items()})
+        loss_dict.update({f"action_{k}": _detach(v) for k, v in action_loss_dict.items()})
+        loss_debug = dict(action_loss_debug=action_loss_debug)
         return loss_dict, loss_debug

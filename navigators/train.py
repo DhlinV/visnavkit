@@ -51,11 +51,11 @@ def check_git_status():
 
 
 def build_targets(batch):
-    """Build flattened targets from batch (vision, policy). Returns targets."""
+    """Build flattened targets from batch (vision, action). Returns targets."""
     return recursive_flatten_01(
         dict(
             vision=dict(frame_speeds=batch["frame_speeds"]),
-            policy=dict(future_poses=batch["future_poses"]),
+            action=dict(future_poses=batch["future_poses"]),
         )
     )
 
@@ -70,7 +70,7 @@ def load_pretrained_model_weights(model: torch.nn.Module, pretrained_cfg: DictCo
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     state_dict = ckpt.get("state_dict", ckpt)
 
-    # Lightning checkpoints store LitModel keys like "model.vision_model..."
+    # Lightning checkpoints store LitModel keys like "model.vision_encoder..."
     if any(k.startswith("model.") for k in state_dict):
         state_dict = {k.removeprefix("model."): v for k, v in state_dict.items() if k.startswith("model.")}
 
@@ -156,8 +156,8 @@ class LitModel(L.LightningModule):
     def validation_step(self, batch, batch_idx):
         y_hat, targets, loss_debug, x, effective_batch_size = self._step(batch, batch_idx, stage="val")
 
-        plan_head = self.model.policy_model.plan_head
-        planner_preds = plan_head.parse_output(y_hat["policy"]["plan"]["plans"])
+        plan_head = self.model.action_decoder.plan_head
+        planner_preds = plan_head.parse_output(y_hat["action"]["plan"]["plans"])
         compute_and_log_metrics(
             self,
             planner_preds,
@@ -203,11 +203,11 @@ def main(cfg: DictConfig):
     wandb_logger.log_hyperparams(OmegaConf.to_container(cfg, resolve=True))
     lr_monitor = LearningRateMonitor(logging_interval="step")
     checkpoint_callback = ModelCheckpoint(
-        monitor="val/policy_reg",
+        monitor="val/action_reg",
         save_top_k=cfg.trainer.logging.save_top_k_ckpts,
         save_last=True,
         mode="min",
-        filename="epoch_{epoch:02d}-step_{step}-val_loss_{val/policy_reg:.4f}",
+        filename="epoch_{epoch:02d}-step_{step}-val_loss_{val/action_reg:.4f}",
         auto_insert_metric_name=False,
     )
 
