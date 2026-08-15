@@ -6,10 +6,10 @@ description: Use or extend the reference-model recipes (GNM, ViNT, NoMaD, CityWa
 # Model zoo
 
 Every recipe in `navigators/configs/model/` composes three swappable parts — vision
-encoder x summarizer x plan head — purely via yaml (`defaults: [base|<parent>, _self_]`
+encoder x temporal_encoder x plan head — purely via yaml (`defaults: [base|<parent>, _self_]`
 plus `_target_` overrides). No recipe has its own model class.
 
-| recipe | encoder | summarizer | head |
+| recipe | encoder | temporal_encoder | head |
 |---|---|---|---|
 | base | FastViT-T8 (pair-stacked) | causal transformer x1 | PlanHead (MHP, Laplace NLL) |
 | gnm | MobileNetV2 | none (`num_layers: 0`) | WaypointHead |

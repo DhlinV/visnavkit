@@ -24,7 +24,7 @@ navigators/
 ├── data/          # datasets + lightning datamodules (DALI and torch loaders)
 ├── models/        # E2EModel, ActionDecoder, LitModel
 │   ├── encoders/     # vision encoders (timm backbone, DINOv2/v3)
-│   ├── summarizers/  # temporal fusion over the frame sequence
+│   ├── temporal_encoders/  # temporal fusion over the frame sequence
 │   ├── heads/        # plan heads (MHP, waypoint, diffusion), pose_head
 │   ├── layers/       # res blocks
 │   └── losses/       # laplace NLL
@@ -58,12 +58,12 @@ uv run python -m navigators.scripts.export checkpoint=<ckpt> output=<out.onnx>
 
 ## Model zoo
 
-Recipes in `configs/model/` compose a vision encoder, a temporal summarizer, and a plan
+Recipes in `configs/model/` compose a vision encoder, a temporal encoder, and a plan
 head via hydra `_target_` overrides — select one with `model=<recipe>`. The reference-work
 recipes are adaptations to this repo's goal-free, fixed-horizon data contract, not
 reproductions.
 
-| recipe | encoder | summarizer | head |
+| recipe | encoder | temporal_encoder | head |
 |---|---|---|---|
 | `base` | FastViT-T8 | causal transformer ×1 | MHP (Laplace NLL) |
 | `gnm` | MobileNetV2 | none | waypoint regression |

@@ -3,11 +3,11 @@ import torch.nn as nn
 
 
 class ActionDecoder(nn.Module):
-    """Temporal fusion (summarizer) over per-frame vision tokens -> multi-hypothesis plan head."""
+    """Temporal encoder over per-frame vision tokens -> plan head."""
 
-    def __init__(self, summarizer, plan_head):
+    def __init__(self, temporal_encoder, plan_head):
         super().__init__()
-        self.summarizer = summarizer
+        self.temporal_encoder = temporal_encoder
         self.plan_head = plan_head
 
         if not self.plan_head.pretrained:
@@ -29,8 +29,8 @@ class ActionDecoder(nn.Module):
             nn.init.normal_(m.weight, mean=0.0, std=0.02)
 
     def forward(self, x):
-        x = self.summarizer(x)  # [B, F, feat_size] -> [B, F, feat_size] (or [B, feat_size] if reduced)
-        # if summarizer made a prediction for each token, convert it to a batch
+        x = self.temporal_encoder(x)  # [B, F, feat_size] -> [B, F, feat_size] (or [B, feat_size] if reduced)
+        # if temporal_encoder made a prediction for each token, convert it to a batch
         if x.dim() == 3:
             x = x.flatten(0, 1)  # [B, F, feat_size] -> [B * F, feat_size]
 

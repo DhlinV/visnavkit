@@ -27,7 +27,7 @@ def generate_causal_mask(seq_len: int, mask_p: float = 0.0, device=None) -> torc
 
 
 # TODO: random mask
-class Summarizer(nn.Module):
+class TemporalEncoder(nn.Module):
     def __init__(
         self,
         embed_dim=512,

@@ -11,7 +11,7 @@ modules:
     out_indices: [2, 3, 4]
     act_layer: null # keep the backbone's native activations for pretrained weights
   action_decoder:
-    summarizer:
+    temporal_encoder:
       num_layers: 4
     plan_head:
       _target_: navigators.models.heads.waypoint_head.WaypointHead

@@ -10,7 +10,7 @@ uv run python -m navigators.scripts.export checkpoint=<ckpt> output=<out.onnx>  
 ```
 
 ## What the export path does (scripts/export.py)
-1. Flips `summarizer.reduction` `none -> last` (training predicts per token, deploy wants the last one only).
+1. Flips `temporal_encoder.reduction` `none -> last` (training predicts per token, deploy wants the last one only).
 2. Disables the MHA fastpath (`torch.backends.mha.set_fastpath_enabled(False)`) — the fused aten op is not exportable.
 3. `reparameterize_model`: calls `.reparameterize()` on any module that has it (fastvit), then folds Linear->BatchNorm1d pairs.
 4. Export signature: `model(x, fb)` with `x (1, 6, h, w)` and `fb (1, seq_step*seq_len - seq_step, feat_size)`; outputs ordered `plan, pose, feat_out, *head_outputs` — `get_export_output_names()` must match the forward tuple exactly.

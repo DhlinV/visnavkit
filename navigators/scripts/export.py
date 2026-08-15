@@ -96,11 +96,11 @@ def main(cfg: DictConfig):
     # aten::_native_multi_head_attention op the ONNX tracer cannot export
     torch.backends.mha.set_fastpath_enabled(False)
 
-    # None means we make a prediction for each token coming out of the summarizer. This is a training only hack
+    # None means we make a prediction for each token coming out of the temporal_encoder. This is a training only hack
     # For deployment, we just want a prediction for the last token
-    summarizer = cfg.model.modules.action_decoder.get("summarizer")
-    if summarizer is not None and summarizer.reduction == "none":
-        summarizer.reduction = "last"
+    temporal_encoder = cfg.model.modules.action_decoder.get("temporal_encoder")
+    if temporal_encoder is not None and temporal_encoder.reduction == "none":
+        temporal_encoder.reduction = "last"
 
     output_filepath = cfg.output
     if cfg.checkpoint is None:  # checkpoint=null: export with untrained weights (pipeline check)
