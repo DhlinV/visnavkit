@@ -1,6 +1,6 @@
 ---
 name: oss-audit
-description: Audit navigators for open-source readiness before publishing or after large changes. Use before tagging a release or making the repo public.
+description: Audit visnavkit for open-source readiness before publishing or after large changes. Use before tagging a release or making the repo public.
 ---
 
 # Open-source audit
@@ -11,7 +11,7 @@ This repo is intended to be public. Run this before release and after big merges
 ```bash
 # personal names, emails, private paths, internal repo names
 grep -rniE "todo\([a-z]+\)|@(gmail|comma)|/home/|driving-model-track" \
-  navigators tests README.md pyproject.toml --include="*.py" --include="*.yaml" --include="*.toml" --include="*.md"
+  visnavkit tests README.md pyproject.toml --include="*.py" --include="*.yaml" --include="*.toml" --include="*.md"
 ```
 - No person names in TODOs (plain `TODO:` only), no private repo mentions, no absolute home paths.
 - `CLAUDE.md` / `.claude/skills/` may reference internal workflow — confirm with the owner whether they ship.
@@ -27,7 +27,7 @@ grep -rniE "todo\([a-z]+\)|@(gmail|comma)|/home/|driving-model-track" \
 ```bash
 uv run ruff check .
 uv run pytest tests/ -q
-uv run python -m navigators.scripts.smoke_forward model.modules.vision_encoder.pretrained=false
-uv run python -m navigators.scripts.export checkpoint=null output=/tmp/audit.onnx model.modules.vision_encoder.pretrained=false
+uv run python -m visnavkit.scripts.smoke_forward model.modules.vision_encoder.pretrained=false
+uv run python -m visnavkit.scripts.export checkpoint=null output=/tmp/audit.onnx model.modules.vision_encoder.pretrained=false
 ```
 All four must pass. Report findings as a list with file:line references; fix only after approval.

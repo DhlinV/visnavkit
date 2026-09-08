@@ -1,12 +1,12 @@
 ---
 name: export-deploy
-description: Export a navigators checkpoint to ONNX and debug export failures. Use when producing a deployment model or when torch.onnx.export breaks.
+description: Export a visnavkit checkpoint to ONNX and debug export failures. Use when producing a deployment model or when torch.onnx.export breaks.
 ---
 
 # Export / deploy
 
 ```bash
-uv run python -m navigators.scripts.export checkpoint=<ckpt> output=<out.onnx>   # checkpoint=null: untrained pipeline check
+uv run python -m visnavkit.scripts.export checkpoint=<ckpt> output=<out.onnx>   # checkpoint=null: untrained pipeline check
 ```
 
 ## What the export path does (scripts/export.py)

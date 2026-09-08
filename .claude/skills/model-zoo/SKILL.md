@@ -5,7 +5,7 @@ description: Use or extend the reference-model recipes (GNM, ViNT, NoMaD, CityWa
 
 # Model zoo
 
-Every recipe in `navigators/configs/model/` composes three swappable parts — vision
+Every recipe in `visnavkit/configs/model/` composes three swappable parts — vision
 encoder x temporal_encoder x plan head — purely via yaml (`defaults: [base|<parent>, _self_]`
 plus `_target_` overrides). No recipe has its own model class.
 
@@ -28,7 +28,7 @@ graphs, RL post-training) are intentionally omitted.
 
 ## Run one
 ```bash
-uv run python -m navigators.scripts.train experiment=<name> dataset=<dali|torch> model=<recipe>
+uv run python -m visnavkit.scripts.train experiment=<name> dataset=<dali|torch> model=<recipe>
 ```
 (or set the model inside the experiment file).
 

@@ -8,6 +8,6 @@
 - Extremely concise replies: lead with the answer or the exact command; one short why.
 - Clear thinking path: state the diagnosis in 1-2 lines before the fix, so the reasoning is checkable.
 - Verify before claiming done: smoke-test the forward/export paths or dry-run the actual command; report real shapes/losses.
-- Repo conventions: `uv run` for everything; `train.py` requires a clean git tree (untracked files count), so every new file must be committed; after pushing, give the exact training/export command.
-- This repo is an installable lib (`uv pip install -e .`); configs ship inside the wheel via `navigators.configs` package-data, so keep all yamls under `navigators/configs/`.
+- Repo conventions: `uv run` for everything; training records Git provenance, and `strict_git=true` requires a clean tree (untracked files count); after pushing, give the exact training/export command.
+- This repo is an installable lib (`uv pip install -e .`); configs ship inside the wheel via `visnavkit.configs` package-data, so keep all yamls under `visnavkit/configs/`.
 - Proven components are ported from `~/projects/driving-model-track` (autopilot). Prefer porting from there over writing new ones.

@@ -1,0 +1,55 @@
+defaults:
+  - train
+  - _self_
+
+# Hydra overrides compose the same model recipes used for training.
+command: list  # list | download | prepare | fixture | export | profile | evaluate | suite | smoke
+source: native  # native architecture adaptations | published pinned ONNX artifacts
+model_id: null  # defaults to Hydra's selected model recipe
+artifact: null
+checkpoint: null
+artifact_dir: outputs/benchmark_models
+output_dir: outputs/benchmark
+input_archive: null  # NPZ containing exact ONNX input names for profiling
+dataset_archive: null  # NPZ prepared observations + targets + target_times_s + sample_ids
+allow_untrained: false
+samples: 4
+batch_size: 1
+horizons: [0.5, 1.0, 3.0]
+
+sampling:
+  num_candidates: 8  # published NoMaD sampler; native settings remain in model config
+
+runtime:
+  provider: CPUExecutionProvider
+  threads: 1
+  warmup: 5
+  iterations: 30
+  shapes: {}
+
+adapter:
+  name: onnx
+  output_name: trajectories
+  scores_name: null
+  layout: NKTD
+  prediction_times_s: null
+  xy_scale: 1.0
+  speed_index: null  # third output could be yaw/z, never assume it is speed
+
+suite:
+  models: [resnet18, gnm, vint, nomad, citywalker, s2e, mimic]
+  checkpoints: {}
+  fail_fast: false
+
+hooks:
+  - _target_: visnavkit.benchmark.hooks.ReportHook
+
+# No pretrained download is needed for size/latency or pipeline checks.
+model:
+  modules:
+    vision_encoder:
+      pretrained: false
+
+hydra:
+  job:
+    chdir: false

@@ -1,14 +1,14 @@
 ---
 name: downstream-impl
-description: Implement downstream features in navigators (new heads, datasets, experiments, export consumers). Use when adding or modifying components in this repo so contracts and verification steps are honored.
+description: Implement downstream features in visnavkit (new heads, datasets, experiments, export consumers). Use when adding or modifying components in this repo so contracts and verification steps are honored.
 ---
 
-# Downstream implementation in navigators
+# Downstream implementation in visnavkit
 
 ## Ground rules
 - Port proven components from `~/projects/driving-model-track` (autopilot) instead of writing new ones. Smallest viable diff.
 - `uv run` for everything. `train.py` requires a clean git tree (untracked files count) — commit every new file before training.
-- Configs live under `navigators/configs/` only (shipped as `navigators.configs` package-data so the installed lib can compose them).
+- Configs live under `visnavkit/configs/` only (shipped as `visnavkit.configs` package-data so the installed lib can compose them).
 
 ## Contracts (do not break)
 
@@ -20,7 +20,7 @@ description: Implement downstream features in navigators (new heads, datasets, e
 | `frame_speeds` | (B, S, 1) | float32 |
 | `frame_times_s` | (B, S) | float32 |
 
-`dataset=dali` (GPU decode) and `dataset=torch` (torchcodec, CPU) are interchangeable; any new loader must match this dict and the `path label start end` file_list format (`navigators/data/file_list.py`). Pose targets come from `navigators/data/pose_targets.py` — reuse, never reimplement.
+`dataset=dali` (GPU decode) and `dataset=torch` (torchcodec, CPU) are interchangeable; any new loader must match this dict and the `path label start end` file_list format (`visnavkit/data/file_list.py`). Pose targets come from `visnavkit/data/pose_targets.py` — reuse, never reimplement.
 
 ### Layout
 `data/` datasets + datamodules · `models/` E2EModel/decoder + `encoders/` `temporal_encoders/` `heads/` `layers/` `losses/` + `lit_model.py` · `evaluation/` metrics + calculators · `scripts/` train/export/smoke_forward/benchmark entry points · `configs/` hydra. One file per encoder/temporal_encoder/head variant, swapped via `_target_` in a `configs/model/<recipe>.yaml` (see /model-zoo). New code goes in the matching directory; entry points stay thin (library logic lives outside `scripts/`).
@@ -36,11 +36,11 @@ description: Implement downstream features in navigators (new heads, datasets, e
 
 ## Verify before claiming done (in order)
 ```bash
-uv run python -m navigators.scripts.smoke_forward model.modules.vision_encoder.pretrained=false  # forward shapes
+uv run python -m visnavkit.scripts.smoke_forward model.modules.vision_encoder.pretrained=false  # forward shapes
 uv run pytest tests/ -q
 uv run ruff check .
-uv run python -m navigators.scripts.benchmark_dataloader --batches 20 common.data_root=<root>  # if loaders touched
-uv run python -m navigators.scripts.export checkpoint=<ckpt> output=/tmp/test.onnx            # if model/export touched
+uv run python -m visnavkit.scripts.benchmark_dataloader --batches 20 common.data_root=<root>  # if loaders touched
+uv run python -m visnavkit.scripts.export checkpoint=<ckpt> output=/tmp/test.onnx            # if model/export touched
 ```
 Report real shapes/losses from these runs. Then commit, push, and give the exact train command:
-`uv run python -m navigators.scripts.train experiment=<name> dataset=<dali|torch>`.
+`uv run python -m visnavkit.scripts.train experiment=<name> dataset=<dali|torch>`.

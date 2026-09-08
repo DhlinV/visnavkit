@@ -1,0 +1,10 @@
+# base recipe with a frozen DINOv2 ViT encoder (patch14; inputs padded to a patch multiple)
+defaults:
+  - base
+  - _self_
+
+modules:
+  vision_encoder:
+    _target_: visnavkit.models.encoders.dino_encoder.DinoEncoder
+    backbone_name: vit_small_patch14_dinov2
+    freeze_backbone: true

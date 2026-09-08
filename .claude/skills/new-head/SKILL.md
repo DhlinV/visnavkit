@@ -1,11 +1,11 @@
 ---
 name: new-head
-description: Add a new plan head variant to navigators. Use when implementing a new trajectory decoder (deterministic regression, MHP, diffusion, ...).
+description: Add a new plan head variant to visnavkit. Use when implementing a new trajectory decoder (deterministic regression, MHP, diffusion, ...).
 ---
 
 # New plan head
 
-One file per head in `navigators/models/heads/`, swapped via
+One file per head in `visnavkit/models/heads/`, swapped via
 `modules.action_decoder.plan_head._target_` in a `configs/model/<name>.yaml` recipe.
 
 ## Contract (all four required)
@@ -29,7 +29,7 @@ weights) and `**_ignored` kwargs (recipes inherit the base PlanHead keys via hyd
 
 ## Verify
 ```bash
-uv run python -m navigators.scripts.smoke_forward model=<name> model.modules.vision_encoder.pretrained=false
+uv run python -m visnavkit.scripts.smoke_forward model=<name> model.modules.vision_encoder.pretrained=false
 ```
 Add the recipe to the zoo test parametrization + a train-mode loss test (finite loss),
 pytest + ruff. If the head keeps the flat layout, export needs no changes.

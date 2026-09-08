@@ -1,0 +1,31 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  cpu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install video decoding libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Install locked dependencies
+        run: uv sync --locked --group dev --extra export
+      - name: Lint
+        run: uv run --no-sync ruff check visnavkit tests
+      - name: Regression and CLI checks
+        run: uv run --no-sync pytest tests/ -q

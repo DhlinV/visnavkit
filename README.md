@@ -1,6 +1,10 @@
-# navigators
+# VisNavKit
 
-Navigation imitation-learning models: hydra configs, Lightning training, DALI/torch dataloaders, ONNX export.
+**Visual navigation models, training, and benchmarks.**
+
+A configurable toolkit for training visual navigation policies, exporting them
+to ONNX, and comparing inference performance and open-loop trajectory quality.
+Compose vision encoders, temporal encoders, and policy heads with Hydra.
 
 ## Setup
 
@@ -11,15 +15,25 @@ uv sync
 ## Use as a library
 
 ```bash
-uv pip install -e /path/to/navigators   # or: uv add --editable ../navigators
+uv pip install -e /path/to/visnavkit   # or: uv add --editable ../visnavkit
 ```
 
-Configs ship inside the package (`navigators.configs`), so hydra composition works from an install too.
+Configs ship inside the package (`visnavkit.configs`), so hydra composition works from an install too.
+
+## Workflow
+
+```mermaid
+flowchart LR
+    Data["Video + ego poses"] --> Windows["Aligned observation windows"]
+    Windows --> Train["Policy training"]
+    Train --> Export["Checkpoint + ONNX export"]
+    Export --> Benchmark["Latency + trajectory metrics"]
+```
 
 ## Layout
 
 ```
-navigators/
+visnavkit/
 ├── configs/       # hydra configs (dataset/, model/, optimizer/, metrics/, experiment/)
 ├── data/          # datasets + lightning datamodules (DALI and torch loaders)
 ├── models/        # E2EModel, ActionDecoder, LitModel
@@ -28,17 +42,38 @@ navigators/
 │   ├── heads/        # plan heads (MHP, waypoint, diffusion), pose_head
 │   ├── layers/       # res blocks
 │   └── losses/       # laplace NLL
+├── benchmark/     # model catalog, ONNX profiling, datasets, and trajectory metrics
 ├── evaluation/    # metrics + metric calculators (ADE/FDE)
-├── scripts/       # entry points: train, export, smoke_forward, benchmark_dataloader
+├── scripts/       # entry points: train, export, benchmark, smoke_forward, benchmark_dataloader
 └── utils/
 ```
 
 ## Smoke test
 
 ```bash
-uv run python -m navigators.scripts.smoke_forward
+uv run python -m visnavkit.scripts.smoke_forward
 uv run pytest tests/
 ```
+
+## Open-loop benchmark
+
+Generate observations, export a random-weight policy, verify PyTorch/ONNX parity,
+measure CPU inference, and score the generated trajectories without downloading weights:
+
+```bash
+uv run visnavkit-benchmark command=smoke model=gnm \
+  common.crop_wh=[32,32] common.downscale_factor=1 common.seq_length=2 \
+  samples=2 runtime.warmup=1 runtime.iterations=2 output_dir=outputs/benchmark/smoke
+```
+
+This is a **pipeline check**. Trained-policy quality requires a checkpoint and a
+real evaluation split. The command writes `result.json`, `results.csv`, an ONNX
+graph with metadata and parity inputs, a fixture, and saved predictions.
+
+See the [benchmark commands and protocol](docs/benchmark.md) for profiling,
+dataset preparation, evaluation, suites, and extension hooks. The
+[model catalog](docs/models.md) distinguishes published ONNX bundles from local
+architecture adaptations and records pending output-contract validation.
 
 ## Dataloaders
 
@@ -46,14 +81,18 @@ Two interchangeable datamodules over the same `path label start end` file_list f
 `dataset=dali` (GPU decode, NVIDIA DALI) and `dataset=torch` (CPU decode, torchcodec).
 
 ```bash
-uv run python -m navigators.scripts.benchmark_dataloader --batches 50 common.data_root=/data/nav_clips
+uv sync --extra dali  # NVIDIA GPU: install DALI to compare both loaders
+uv run visnavkit-benchmark-data --batches 50 common.data_root=/data/nav_clips
 ```
+
+For the torch loader alone, pass `--datasets torch` before `--batches`.
 
 ## Train / export
 
 ```bash
-uv run python -m navigators.scripts.train experiment=<name>   # needs a dataset config first
-uv run python -m navigators.scripts.export checkpoint=<ckpt> output=<out.onnx>
+uv run visnavkit-train experiment=<name>   # needs a dataset config first
+uv sync --extra export  # optional dependency for the deployment exporter
+uv run visnavkit-export checkpoint=<ckpt> output=<out.onnx>
 ```
 
 ## Model zoo
@@ -66,6 +105,7 @@ reproductions.
 | recipe | encoder | temporal_encoder | head |
 |---|---|---|---|
 | `base` | FastViT-T8 | causal transformer ×1 | MHP (Laplace NLL) |
+| `resnet18` | ResNet18 | none | waypoint regression |
 | `gnm` | MobileNetV2 | none | waypoint regression |
 | `vint` | EfficientNet-B0 | transformer ×4 | waypoint regression |
 | `nomad` | EfficientNet-B0 | transformer ×4 | diffusion policy |

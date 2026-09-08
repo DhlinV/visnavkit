@@ -1,0 +1,9 @@
+defaults:
+  - train
+  - _self_
+
+checkpoint: null  # null: export with untrained weights (pipeline check)
+output: visnavkit.onnx
+onnx_opset_version: 14
+half: true
+export_heads: []

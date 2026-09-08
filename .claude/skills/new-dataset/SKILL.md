@@ -1,6 +1,6 @@
 ---
 name: new-dataset
-description: Wire a new clip dataset into navigators dataloaders. Use when new data lands or a new dataset config/file_list is needed.
+description: Wire a new clip dataset into visnavkit dataloaders. Use when new data lands or a new dataset config/file_list is needed.
 ---
 
 # New dataset
@@ -23,17 +23,17 @@ future frames on disk. Cap file_list `end` accordingly or the pose loader raises
 
 ## file_list format
 One line per clip: `path label start end` — labels contiguous from 0, `end` exclusive,
-relative paths resolved against `data_root` (`navigators/data/file_list.py`).
+relative paths resolved against `data_root` (`visnavkit/data/file_list.py`).
 
 ## Steps
 1. Write `train.txt` / `val.txt` file_lists next to the clips (or pass absolute paths).
-2. Add `navigators/configs/dataset/<name>.yaml` — copy `dali.yaml` (or `torch.yaml`) and
+2. Add `visnavkit/configs/dataset/<name>.yaml` — copy `dali.yaml` (or `torch.yaml`) and
    change only file_list names / loader knobs; keep `${common.*}` interpolations.
 3. Verify both loaders and compare throughput:
    ```bash
-   uv run python -m navigators.scripts.benchmark_dataloader --batches 50 common.data_root=<root> dataset=<name>
+   uv run python -m visnavkit.scripts.benchmark_dataloader --batches 50 common.data_root=<root> dataset=<name>
    ```
    Check the printed frames shape is `(B, S, 6, h, w)` uint8 and first-batch latency is sane.
 4. Spot-check targets: poses of a straight-driving clip should have y ~ 0 and v matching
-   `frame_speeds`. Pose targets must come from `navigators/data/pose_targets.py` — never reimplement.
+   `frame_speeds`. Pose targets must come from `visnavkit/data/pose_targets.py` — never reimplement.
 5. Commit everything (file_lists too if they live in-repo), then train.

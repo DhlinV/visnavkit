@@ -1,0 +1,17 @@
+# NoMaD-style recipe (arXiv:2310.07896): the ViNT encoder/transformer with a diffusion
+# policy head instead of deterministic waypoints. Goal masking is out of scope in this
+# goal-free setting.
+defaults:
+  - vint
+  - _self_
+
+modules:
+  action_decoder:
+    plan_head:
+      _target_: visnavkit.models.heads.diffusion_plan_head.DiffusionPlanHead
+      num_modes: 5
+      hidden: 512
+      time_embed_dim: 64
+      train_timesteps: 100
+      sample_steps: 8
+      traj_scale: 10.0

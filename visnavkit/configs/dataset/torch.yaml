@@ -1,0 +1,50 @@
+# Same file_list / window / target semantics as dataset/dali.yaml, but plain torch
+# DataLoader + torchcodec decode on CPU. Augs limited to hflip + color jitter.
+_target_: visnavkit.data.torch_datamodule.TorchDataModule
+batch_size: 32
+num_workers: 8
+prefetch_factor: 4
+pin_memory: true
+train_loader:
+  data_root: ${common.data_root}
+  file_list: train.txt
+  seq_len: ${common.seq_length}
+  frame_step: 1
+  seq_step: ${common.step}
+  steps_between_samples: 20
+  plan_len_seconds: ${common.plan_len_seconds}
+  plan_len_points: ${common.plan_len_points}
+  offset_t_anchors: ${common.offset_t_anchors}
+  use_full_pose: ${common.use_full_pose}
+  crop_xy: ${common.crop_xy}
+  crop_wh: ${common.crop_wh}
+  downscale_factor: ${common.downscale_factor}
+  use_augs: true
+  p_hflip: 0.5
+  color_jitter_brightness: 0.2
+  color_jitter_contrast: 0.2
+  color_jitter_saturation: 0.2
+  color_jitter_hue: 0.1
+  shuffle: true
+
+val_loader:
+  data_root: ${common.data_root}
+  file_list: val.txt
+  seq_len: ${common.seq_length}
+  frame_step: 1
+  seq_step: ${common.step}
+  steps_between_samples: 20
+  plan_len_seconds: ${common.plan_len_seconds}
+  plan_len_points: ${common.plan_len_points}
+  offset_t_anchors: ${common.offset_t_anchors}
+  use_full_pose: ${common.use_full_pose}
+  crop_xy: ${common.crop_xy}
+  crop_wh: ${common.crop_wh}
+  downscale_factor: ${common.downscale_factor}
+  use_augs: false
+  p_hflip: 0.0
+  color_jitter_brightness: 0.0
+  color_jitter_contrast: 0.0
+  color_jitter_saturation: 0.0
+  color_jitter_hue: 0.0
+  shuffle: false

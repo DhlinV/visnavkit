@@ -1,7 +1,7 @@
 [project]
-name = "navigators"
+name = "visnavkit"
 version = "0.1.0"
-description = "navigation IL stack"
+description = "Visual navigation models, training, ONNX export, and open-loop benchmarks"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -12,23 +12,26 @@ dependencies = [
   "torch==2.13.0",
   "torchvision>=0.24.0",
   "torchcodec>=0.10",
-  "nvidia-dali-cuda130~=1.53.0; sys_platform == 'linux'",
   "lightning>=2.6.1",
-  "wandb>=0.26.0",
   "onnx>=1.17.0",
   "onnxruntime>=1.20.1",
-  "onnxslim>=0.1.43",
-  "pytest>=8.4.2",
-  "ruff==0.14.*",  # pinned: 0.16 changed the default rule selection
 ]
 
+[project.optional-dependencies]
+dali = ["nvidia-dali-cuda130~=1.53.0; sys_platform == 'linux'"]
+wandb = ["wandb>=0.26.0"]
+export = ["onnxslim>=0.1.43"]
+
 [project.scripts]
-navigators-train = "navigators.scripts.train:main"
-navigators-export = "navigators.scripts.export:main"
-navigators-benchmark = "navigators.scripts.benchmark_dataloader:main"
+visnavkit-train = "visnavkit.scripts.train:main"
+visnavkit-export = "visnavkit.scripts.export:main"
+visnavkit-benchmark = "visnavkit.scripts.benchmark:main"
+visnavkit-benchmark-data = "visnavkit.scripts.benchmark_dataloader:main"
 
 [dependency-groups]
 dev = [
+  "pytest>=8.4.2",
+  "ruff==0.14.*",
   "ipykernel>=6.29.5",
   "matplotlib>=3.9.3",
 ]
@@ -62,10 +65,14 @@ url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
 [tool.setuptools.packages.find]
-include = ["navigators*"]
+include = ["visnavkit*"]
 
 [tool.setuptools.package-data]
-"navigators.configs" = ["**/*.yaml"]
+"visnavkit.configs" = ["**/*.yaml"]
 
 [tool.ruff]
 line-length = 120
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"

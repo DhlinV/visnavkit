@@ -5,7 +5,7 @@ from hydra.utils import instantiate
 
 
 def _forward(overrides):
-    with initialize_config_module(version_base=None, config_module="navigators.configs"):
+    with initialize_config_module(version_base=None, config_module="visnavkit.configs"):
         cfg = compose(config_name="train", overrides=["model.modules.vision_encoder.pretrained=false", *overrides])
 
     model = instantiate(cfg.model).eval()

@@ -1,0 +1,16 @@
+# ResNet18 behavior-cloning control, not a paper reproduction.
+defaults:
+  - base
+  - _self_
+
+modules:
+  vision_encoder:
+    backbone_name: resnet18
+    out_indices: [2, 3, 4]
+    act_layer: null
+  action_decoder:
+    temporal_encoder:
+      num_layers: 0
+    plan_head:
+      _target_: visnavkit.models.heads.waypoint_head.WaypointHead
+      num_modes: 1

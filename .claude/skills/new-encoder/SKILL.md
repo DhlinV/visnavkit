@@ -1,11 +1,11 @@
 ---
 name: new-encoder
-description: Add a new vision encoder variant to navigators. Use when swapping or implementing a new image backbone (CNN, ViT, DINO, ...).
+description: Add a new vision encoder variant to visnavkit. Use when swapping or implementing a new image backbone (CNN, ViT, DINO, ...).
 ---
 
 # New vision encoder
 
-One file per encoder in `navigators/models/encoders/`, selected via `_target_` in a
+One file per encoder in `visnavkit/models/encoders/`, selected via `_target_` in a
 `configs/model/<name>.yaml` recipe. Never edit an existing encoder class to add a variant.
 
 ## Fast path: it's just a different timm backbone
@@ -27,13 +27,13 @@ Match the VisionEncoder forward contract exactly:
 defaults: [base, _self_]
 modules:
   vision_encoder:
-    _target_: navigators.models.encoders.<file>.<Class>
+    _target_: visnavkit.models.encoders.<file>.<Class>
     ...
 ```
 
 ## Verify
 ```bash
-uv run python -m navigators.scripts.smoke_forward model=<name> model.modules.vision_encoder.pretrained=false
+uv run python -m visnavkit.scripts.smoke_forward model=<name> model.modules.vision_encoder.pretrained=false
 ```
 Add `<name>` to the zoo parametrization in `tests/models/test_smoke_forward.py`, then
 pytest + ruff. Commit before training (clean-tree requirement).
