@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/visnavkit-logo.png" alt="VisNavKit navigation mascot" width="128">
+</p>
+
 # VisNavKit
 
 **Visual navigation models, training, and benchmarks.**
