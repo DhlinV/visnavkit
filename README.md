@@ -2,122 +2,126 @@
   <img src="docs/assets/logo-options/d-arrow.png" alt="" width="64" align="absmiddle"> VisNavKit
 </h1>
 
-**Visual navigation models, training, and benchmarks.**
+**Train, export, and benchmark visual navigation policies.**
 
-A configurable toolkit for training visual navigation policies, exporting them
-to ONNX, and comparing inference performance and open-loop trajectory quality.
-Compose vision encoders, temporal encoders, and policy heads with Hydra.
+VisNavKit combines vision encoders, temporal encoders, and policy heads through
+Hydra configuration. Train on video and ego poses, export policies to ONNX, and
+measure inference latency and open-loop trajectory error.
 
-## Setup
+[Benchmark guide](docs/benchmark.md) · [Model catalog](docs/models.md) · [Configurations](visnavkit/configs/)
+
+## Quick start
+
+From a local checkout, install dependencies with `uv`:
 
 ```bash
 uv sync
 ```
 
-## Use as a library
+Run a small benchmark with generated data and random weights—no dataset or
+pretrained weights required:
 
 ```bash
-uv pip install -e /path/to/visnavkit   # or: uv add --editable ../visnavkit
+uv run visnavkit-benchmark command=smoke model=gnm \
+  'common.crop_wh=[32,32]' common.downscale_factor=1 common.seq_length=2 \
+  samples=2 runtime.warmup=1 runtime.iterations=2 output_dir=outputs/benchmark/smoke
 ```
 
-Configs ship inside the package (`visnavkit.configs`), so hydra composition works from an install too.
+This checks PyTorch/ONNX numerical parity, measures CPU inference, and scores
+synthetic trajectories. Results are saved under `outputs/benchmark/smoke/`,
+including `result.json`, `results.csv`, the ONNX model, and predictions.
+**This is a pipeline check; measuring policy quality requires trained weights
+and a real evaluation split.** See the [benchmark guide](docs/benchmark.md) for
+dataset preparation, profiling, and evaluation.
 
-## Workflow
+## Train and export
 
-```mermaid
-flowchart LR
-    Data["Video + ego poses"] --> Windows["Aligned observation windows"]
-    Windows --> Train["Policy training"]
-    Train --> Export["Checkpoint + ONNX export"]
-    Export --> Benchmark["Latency + trajectory metrics"]
+Prepare `train.txt` and `val.txt` manifests with rows of `video_path label start end`,
+plus the videos and pose arrays described in the
+[data format](docs/benchmark.md#prepare-and-evaluate-real-data). Set
+`common.data_root` to your dataset directory. The torch loader uses CPU video
+decoding and requires FFmpeg; TorchCodec is included in the dependencies.
+
+```bash
+uv run visnavkit-train dataset=torch model=base experiment=baseline \
+  common.data_root=/data/nav_clips
 ```
 
-## Layout
+Select a model with `model=<recipe>`. Keep experiment-specific overrides in
+[`visnavkit/configs/experiment/`](visnavkit/configs/experiment/) and select them
+with `experiment=<name>`.
 
-```
-visnavkit/
-├── configs/       # hydra configs (dataset/, model/, optimizer/, metrics/, experiment/)
-├── data/          # datasets + lightning datamodules (DALI and torch loaders)
-├── models/        # E2EModel, ActionDecoder, LitModel
-│   ├── encoders/     # vision encoders (timm backbone, DINOv2/v3)
-│   ├── temporal_encoders/  # temporal fusion over the frame sequence
-│   ├── heads/        # plan heads (MHP, waypoint, diffusion), pose_head
-│   ├── layers/       # res blocks
-│   └── losses/       # laplace NLL
-├── benchmark/     # model catalog, ONNX profiling, datasets, and trajectory metrics
-├── evaluation/    # metrics + metric calculators (ADE/FDE)
-├── scripts/       # entry points: train, export, benchmark, smoke_forward, benchmark_dataloader
-└── utils/
+Export a trained checkpoint for deployment:
+
+```bash
+uv sync --extra export
+uv run visnavkit-export checkpoint=/path/to/model.ckpt output=outputs/policy.onnx
 ```
 
-## Smoke test
+Deployment export uses a feature buffer to reuse past frame features. For
+full-window inference measurements, use the
+[benchmark exporter](docs/benchmark.md#native-export-and-profiling).
+
+<details>
+<summary>Optional: GPU video decoding with DALI</summary>
+
+On an NVIDIA GPU, install DALI and use `dataset=dali` when training. Both loaders
+share the same manifests and target format.
+
+```bash
+uv sync --extra dali
+uv run visnavkit-benchmark-data --batches 50 common.data_root=/data/nav_clips
+```
+
+To benchmark only the torch loader, add `--datasets torch` before `--batches`;
+the DALI extra is then unnecessary.
+
+</details>
+
+## Model recipes
+
+[Local recipes](visnavkit/configs/model/) share a goal-free, fixed-horizon data
+format. Recipes named after research models are architecture adaptations, not
+paper reproductions or compatible replacements for the original checkpoints.
+The [model catalog](docs/models.md) tracks published ONNX bundles separately,
+including validation still needed before comparing policy quality.
+
+| Recipe | Vision encoder | Temporal encoder | Policy head |
+| --- | --- | --- | --- |
+| `base`, `mimic` | FastViT-T8 | 1-layer causal transformer | MHP |
+| `resnet18` | ResNet18 | None | Waypoint regression |
+| `gnm` | MobileNetV2 | None | Waypoint regression |
+| `vint` | EfficientNet-B0 | 4-layer transformer | Waypoint regression |
+| `nomad` | EfficientNet-B0 | 4-layer transformer | Diffusion |
+| `citywalker` | Frozen DINOv2 ViT-S | 4-layer transformer | Waypoint regression |
+| `dinov2` | Frozen DINOv2 ViT-S | 1-layer causal transformer | MHP |
+| `dinov3`, `s2e` | Frozen DINOv3 ViT-S | 1-layer causal transformer | MHP |
+| `diffusion` | FastViT-T8 | 1-layer causal transformer | Diffusion |
+
+MHP is a multi-hypothesis prediction head trained with Laplace negative
+log-likelihood.
+
+## Development
 
 ```bash
 uv run python -m visnavkit.scripts.smoke_forward
 uv run pytest tests/
 ```
 
-## Open-loop benchmark
-
-Generate observations, export a random-weight policy, verify PyTorch/ONNX parity,
-measure CPU inference, and score the generated trajectories without downloading weights:
+To use VisNavKit from another project, install it as an editable dependency:
 
 ```bash
-uv run visnavkit-benchmark command=smoke model=gnm \
-  common.crop_wh=[32,32] common.downscale_factor=1 common.seq_length=2 \
-  samples=2 runtime.warmup=1 runtime.iterations=2 output_dir=outputs/benchmark/smoke
+uv add --editable /path/to/visnavkit
 ```
 
-This is a **pipeline check**. Trained-policy quality requires a checkpoint and a
-real evaluation split. The command writes `result.json`, `results.csv`, an ONNX
-graph with metadata and parity inputs, a fixture, and saved predictions.
+Hydra configs ship with the package as `visnavkit.configs`.
 
-See the [benchmark commands and protocol](docs/benchmark.md) for profiling,
-dataset preparation, evaluation, suites, and extension hooks. The
-[model catalog](docs/models.md) distinguishes published ONNX bundles from local
-architecture adaptations and records pending output-contract validation.
+Source: [data loaders](visnavkit/data/) · [models](visnavkit/models/) ·
+[benchmarks](visnavkit/benchmark/) · [metrics](visnavkit/evaluation/) ·
+[CLI scripts](visnavkit/scripts/)
 
-## Dataloaders
-
-Two interchangeable datamodules over the same `path label start end` file_list format:
-`dataset=dali` (GPU decode, NVIDIA DALI) and `dataset=torch` (CPU decode, torchcodec).
-
-```bash
-uv sync --extra dali  # NVIDIA GPU: install DALI to compare both loaders
-uv run visnavkit-benchmark-data --batches 50 common.data_root=/data/nav_clips
-```
-
-For the torch loader alone, pass `--datasets torch` before `--batches`.
-
-## Train / export
-
-```bash
-uv run visnavkit-train experiment=<name>   # needs a dataset config first
-uv sync --extra export  # optional dependency for the deployment exporter
-uv run visnavkit-export checkpoint=<ckpt> output=<out.onnx>
-```
-
-## Model zoo
-
-Recipes in `configs/model/` compose a vision encoder, a temporal encoder, and a plan
-head via hydra `_target_` overrides — select one with `model=<recipe>`. The reference-work
-recipes are adaptations to this repo's goal-free, fixed-horizon data contract, not
-reproductions.
-
-| recipe | encoder | temporal_encoder | head |
-|---|---|---|---|
-| `base` | FastViT-T8 | causal transformer ×1 | MHP (Laplace NLL) |
-| `resnet18` | ResNet18 | none | waypoint regression |
-| `gnm` | MobileNetV2 | none | waypoint regression |
-| `vint` | EfficientNet-B0 | transformer ×4 | waypoint regression |
-| `nomad` | EfficientNet-B0 | transformer ×4 | diffusion policy |
-| `citywalker` | DINOv2 ViT-S (frozen) | transformer ×4 | waypoint regression |
-| `s2e` | DINOv3 ViT-S (frozen) | causal transformer ×1 | MHP |
-| `mimic` | = base | = base | = base |
-| `dinov2` / `dinov3` | DINO ViT-S (frozen) | = base | = base |
-| `diffusion` | = base | = base | diffusion policy |
-
-## Reference works
+<details>
+<summary>Research references</summary>
 
 Navigation foundation models and imitation learning:
 
@@ -134,3 +138,5 @@ Simulation and benchmarks for urban micromobility:
 
 - **MetaUrban**: An Embodied AI Simulation Platform for Urban Micromobility (ICLR 2025 Spotlight) — [code](https://github.com/metadriverse/metaurban)
 - **SidewalkBench**: Benchmarking Visual Navigation on Urban Sidewalks — [arXiv:2606.16953](https://arxiv.org/abs/2606.16953)
+
+</details>
