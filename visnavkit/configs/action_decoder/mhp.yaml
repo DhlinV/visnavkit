@@ -1,0 +1,7 @@
+# @package model.modules.action_decoder
+defaults:
+  - base
+  - _self_
+plan_head:
+  _target_: visnavkit.models.action_decoders.mhp.PlanHead
+  mode_selection: angle

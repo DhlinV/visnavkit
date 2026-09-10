@@ -1,0 +1,11 @@
+# @package model.modules.action_decoder
+defaults:
+  - base
+  - _self_
+plan_head:
+  _target_: visnavkit.models.action_decoders.diffusion.DiffusionPlanHead
+  hidden: 512
+  time_embed_dim: 64
+  train_timesteps: 100
+  sample_steps: 8
+  traj_scale: 10.0

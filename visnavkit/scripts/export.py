@@ -14,7 +14,8 @@ from omegaconf import DictConfig, OmegaConf
 from onnxruntime.transformers import float16
 from torch.nn.utils.fusion import fuse_linear_bn_eval
 
-from visnavkit.models.heads.diffusion_plan_head import DiffusionPlanHead
+from visnavkit.models.action_decoders.diffusion import DiffusionPlanHead
+from visnavkit.models.action_decoders.outputs import parse_plan_output as parse_tensor_plan_output
 from visnavkit.models.lit_model import LitModel
 from visnavkit.utils.logger import get_logger
 
@@ -52,23 +53,15 @@ def reparameterize_model(model: torch.nn.Module) -> torch.nn.Module:
     return model
 
 
-def softmax(x):
-    """Compute softmax values for each sets of scores in x."""
-    exponent = np.exp(x - np.max(x, axis=0))
-    return exponent / np.sum(exponent, axis=0)
-
-
 def parse_plan_output(output, M, num_pts, pose_width):
-    output = output.reshape(1, M * (num_pts * 2 * pose_width + 1))
-    pred_plans_reshaped = output.reshape(-1, M, 2 * pose_width * num_pts + 1)
-    path_conf = softmax(pred_plans_reshaped[0, :, -1])
-    paths = pred_plans_reshaped[:, :, :-1].reshape(-1, 2, num_pts, pose_width)[:, 0, :, :2]
-    best_path = paths[path_conf.argmax()]
+    """Preserve the single-sample NumPy export helper and its xy trajectory outputs."""
+    output = np.asarray(output).reshape(1, M * (num_pts * 2 * pose_width + 1))
+    parsed = parse_tensor_plan_output(torch.from_numpy(output), num_modes=M, num_pts=num_pts, pose_size=pose_width)
     return dict(
-        pred_logits=pred_plans_reshaped[0, :, -1],
-        pred_confs=path_conf,
-        pred_plans=paths,
-        best_plan=best_path,
+        pred_logits=output.reshape(M, -1)[:, -1],
+        pred_confs=parsed["confs"][0].numpy(),
+        pred_plans=parsed["plans"][0, :, :, :2].numpy(),
+        best_plan=parsed["best_plan"][0, :, :2].numpy(),
     )
 
 
@@ -146,6 +139,9 @@ def _export_model(cfg):
     input_channels = cfg.model.modules.vision_encoder.in_chans
     img_w = int(cfg.common.crop_wh[0] // cfg.common.downscale_factor)
     img_h = int(cfg.common.crop_wh[1] // cfg.common.downscale_factor)
+    prepare_vision = getattr(infer_model.vision_encoder, "prepare_for_export", None)
+    if prepare_vision is not None:
+        infer_model.vision_encoder = prepare_vision((img_h, img_w))
 
     x = torch.rand(1, input_channels, img_h, img_w).to(device)
     export_cfg = cfg.model.export_cfg

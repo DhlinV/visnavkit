@@ -1,0 +1,6 @@
+# @package model.modules.action_decoder.temporal_encoder
+defaults:
+  - base
+  - _self_
+_target_: visnavkit.models.temporal_encoders.identity.IdentityTemporalEncoder
+num_layers: 0

@@ -1,15 +1,5 @@
-# base recipe with the diffusion plan head (DDPM train / DDIM sample) instead of the MHP head.
-# PlanHead-only keys inherited from base (mode_selection, ...) are ignored by DiffusionPlanHead.
+# FastViT with a diffusion action decoder (DDPM training, DDIM sampling).
 defaults:
   - base
+  - override /action_decoder@_global_.action_decoder: diffusion
   - _self_
-
-modules:
-  action_decoder:
-    plan_head:
-      _target_: visnavkit.models.heads.diffusion_plan_head.DiffusionPlanHead
-      hidden: 512
-      time_embed_dim: 64
-      train_timesteps: 100
-      sample_steps: 8
-      traj_scale: 10.0

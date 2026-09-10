@@ -12,7 +12,9 @@ from omegaconf import OmegaConf
 from torch import nn
 from torch.utils.flop_counter import FlopCounterMode
 
-from visnavkit.models.heads.diffusion_plan_head import DiffusionPlanHead
+from visnavkit.models.action_decoders.diffusion import DiffusionPlanHead
+from visnavkit.models.action_decoders.outputs import parse_plan_output
+from visnavkit.models.compatibility import normalize_model_config
 from visnavkit.utils.common import build_idxs
 
 
@@ -36,6 +38,9 @@ def load_native_model(cfg, checkpoint=None):
     if checkpoint is not None:
         # Loading a complete checkpoint must not fetch backbone initialization weights.
         cfg.model.modules.vision_encoder.pretrained = False
+        for component in (cfg.model.modules.vision_encoder, cfg.model.modules.action_decoder.plan_head):
+            if "weights" in component:
+                component.weights = None
     model = instantiate(cfg.model)
     if checkpoint is not None:
         loaded = torch.load(checkpoint, map_location="cpu", weights_only=False)
@@ -52,7 +57,9 @@ class SequencePolicy(nn.Module):
     def __init__(self, model):
         super().__init__()
         if model.route_encoder is not None:
-            raise ValueError("Native benchmark export currently requires a goal-free recipe; use explicit external feeds.")
+            raise ValueError(
+                "Native benchmark export currently requires a goal-free recipe; use explicit external feeds."
+            )
         self.model = model
         self.plan_head = model.action_decoder.plan_head
 
@@ -67,14 +74,11 @@ class SequencePolicy(nn.Module):
             flat = self.plan_head._sample(temporal, noise=initial_noise)
         else:
             flat = self.plan_head(temporal)["plans"]
-        per_mode = flat.reshape(batch, self.plan_head.num_modes, -1)
-        values = per_mode[..., :-1].reshape(
-            batch, self.plan_head.num_modes, 2, self.plan_head.num_pts, self.plan_head.pose_size
+        parsed = parse_plan_output(
+            flat, num_modes=self.plan_head.num_modes, num_pts=self.plan_head.num_pts, pose_size=self.plan_head.pose_size
         )
-        trajectories = values[:, :, 0]
-        scores = torch.softmax(per_mode[..., -1], dim=-1)
         speed = vision["pose"].reshape(batch, history, -1)[:, -1]
-        return trajectories, scores, speed
+        return parsed["plans"], parsed["confs"], speed
 
 
 def export_native(cfg, output, *, checkpoint=None, seed=42, batch_size=1, model_id="base"):
@@ -92,19 +96,23 @@ def export_native(cfg, output, *, checkpoint=None, seed=42, batch_size=1, model_
         saved_cfg = stored.get("hyper_parameters", {}).get("cfg")
         if saved_cfg is not None:
             saved_cfg = OmegaConf.create(saved_cfg) if isinstance(saved_cfg, dict) else saved_cfg
-            requested = OmegaConf.to_container(cfg.model, resolve=True)
-            restored = OmegaConf.to_container(saved_cfg.model, resolve=True)
-            # Pretrained initialization is irrelevant once complete weights are restored.
-            requested["modules"]["vision_encoder"]["pretrained"] = False
-            restored["modules"]["vision_encoder"]["pretrained"] = False
+            requested = normalize_model_config(cfg.model)
+            restored = normalize_model_config(saved_cfg.model)
             if requested != restored:
-                raise ValueError("Checkpoint model config differs from the requested recipe. Compose its original model/config to avoid mislabeled benchmarks.")
+                raise ValueError(
+                    "Checkpoint model config differs from the requested recipe. Compose its original model/config to avoid mislabeled benchmarks."
+                )
             cfg = saved_cfg
     torch.manual_seed(seed)
     model = load_native_model(cfg, checkpoint_path)
-    wrapper = SequencePolicy(model).eval()
+    parameters_total = sum(p.numel() for p in model.parameters())
+    parameters_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     size = cfg.common
     h, w = int(size.crop_wh[1] // size.downscale_factor), int(size.crop_wh[0] // size.downscale_factor)
+    prepare_vision = getattr(model.vision_encoder, "prepare_for_export", None)
+    if prepare_vision is not None:
+        model.vision_encoder = prepare_vision((h, w))
+    wrapper = SequencePolicy(model).eval()
     frames = torch.rand(batch_size, int(size.seq_length), int(cfg.model.modules.vision_encoder.in_chans), h, w)
     head = model.action_decoder.plan_head
     is_diffusion = isinstance(head, DiffusionPlanHead)
@@ -122,9 +130,13 @@ def export_native(cfg, output, *, checkpoint=None, seed=42, batch_size=1, model_
                 wrapper(*inputs)
             counted_flops = int(counter.get_total_flops())
             torch.onnx.export(
-                wrapper, inputs, str(output), input_names=names,
+                wrapper,
+                inputs,
+                str(output),
+                input_names=names,
                 output_names=["trajectories", "scores", "speed"],
-                opset_version=17, dynamo=False,
+                opset_version=17,
+                dynamo=False,
                 # Fixed batch/context dimensions make the benchmark contract explicit.
             )
     finally:
@@ -155,8 +167,8 @@ def export_native(cfg, output, *, checkpoint=None, seed=42, batch_size=1, model_
         "selection": "unranked_samples" if is_diffusion else "highest_score",
         "num_candidates": head.num_modes,
         "denoising_steps": head.sample_steps if is_diffusion else 0,
-        "parameters_total": sum(p.numel() for p in model.parameters()),
-        "parameters_trainable": sum(p.numel() for p in model.parameters() if p.requires_grad),
+        "parameters_total": parameters_total,
+        "parameters_trainable": parameters_trainable,
         "parameter_scope": "source model, including auxiliary heads; not inferred from ONNX constants",
         "torch_counted_flops": counted_flops,
         "flop_scope": "full-context decision at exported batch size; PyTorch registered operators only, not a total",

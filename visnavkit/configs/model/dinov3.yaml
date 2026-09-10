@@ -1,10 +1,5 @@
 # base recipe with a frozen DINOv3 ViT encoder (patch16; 320x240 divides evenly)
 defaults:
   - base
+  - override /vision_encoder@_global_.vision_encoder: vit_dinov3
   - _self_
-
-modules:
-  vision_encoder:
-    _target_: visnavkit.models.encoders.dino_encoder.DinoEncoder
-    backbone_name: vit_small_patch16_dinov3
-    freeze_backbone: true

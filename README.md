@@ -8,7 +8,7 @@ VisNavKit combines vision encoders, temporal encoders, and policy heads through
 Hydra configuration. Train on video and ego poses, export policies to ONNX, and
 measure inference latency and open-loop trajectory error.
 
-[Benchmark guide](docs/benchmark.md) · [Model catalog](docs/models.md) · [Configurations](visnavkit/configs/)
+[Architecture](docs/architecture.md) · [Benchmark guide](docs/benchmark.md) · [Model catalog](docs/models.md) · [Configurations](visnavkit/configs/)
 
 ## Quick start
 
@@ -101,12 +101,31 @@ including validation still needed before comparing policy quality.
 MHP is a multi-hypothesis prediction head trained with Laplace negative
 log-likelihood.
 
+Select components independently of a recipe:
+
+```bash
+uv run visnavkit-train dataset=torch vision_encoder=vit_dinov2 \
+  temporal_encoder=bidirectional action_decoder=diffusion common.data_root=/data/nav_clips
+```
+
+Vision families live under `models/spatial_encoders/vision_encoders/`, temporal
+attention under `models/temporal_encoders/`, and trajectory decoders under
+`models/action_decoders/`. See the [architecture guide](docs/architecture.md) for
+component choices, tensor contracts, and checkpoint compatibility.
+
 ## Development
 
 ```bash
+uv run visnavkit-sanity-check
+uv run visnavkit-sanity-check --onnx vision_encoder=vit_dinov2 temporal_encoder=bidirectional action_decoder=diffusion
 uv run python -m visnavkit.scripts.smoke_forward
 uv run pytest tests/
 ```
+
+The sanity check prints an ASCII model pipeline and verifies shapes, finite
+losses/gradients, and feature-buffer parity on small synthetic inputs. It uses
+random weights and needs no dataset or pretrained downloads. `--onnx` additionally
+checks ONNX Runtime parity and writes artifacts to `outputs/sanity/`.
 
 To use VisNavKit from another project, install it as an editable dependency:
 

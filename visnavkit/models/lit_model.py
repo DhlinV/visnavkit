@@ -20,33 +20,24 @@ warnings.filterwarnings(
 )
 
 
-def recursive_flatten_01(d):
-    """Recursively flatten along dims 0 and 1"""
-    if isinstance(d, torch.Tensor):
-        return d.flatten(0, 1)
-    elif isinstance(d, dict):
-        return {k: recursive_flatten_01(v) for k, v in d.items()}
-    elif isinstance(d, list):
-        return [recursive_flatten_01(v) for v in d]
-    elif isinstance(d, tuple):
-        return tuple(recursive_flatten_01(v) for v in d)
-    else:
-        return d  # leave other types unchanged
+def build_targets(batch, action_reduction="none"):
+    """Supervise every vision frame and either every action or the final decision.
 
-
-def build_targets(batch):
-    """Build flattened targets from batch (vision, action). Returns targets."""
-    targets = recursive_flatten_01(
-        dict(
-            vision=dict(frame_speeds=batch["frame_speeds"]),
-            action=dict(future_poses=batch["future_poses"]),
-        )
+    Reduced temporal features describe the complete observed window; their action
+    target is the trajectory following its final frame.
+    """
+    if action_reduction not in {"none", "last", "avg", "sum"}:
+        raise ValueError(f"Unknown action reduction: {action_reduction}")
+    future_poses = batch["future_poses"]
+    targets = dict(
+        vision=dict(frame_speeds=batch["frame_speeds"].flatten(0, 1)),
+        action=dict(future_poses=future_poses.flatten(0, 1) if action_reduction == "none" else future_poses[:, -1]),
     )
 
     if "target_times_s" in batch:
         times = batch["target_times_s"]
         targets["action"]["target_times_s"] = (
-            times if times.ndim == 1 else times.repeat_interleave(batch["future_poses"].shape[1], dim=0)
+            times if times.ndim == 1 or action_reduction != "none" else times.repeat_interleave(future_poses.shape[1], dim=0)
         )
     return targets
 
@@ -108,6 +99,8 @@ class LitModel(L.LightningModule):
         model_cfg = copy.deepcopy(cfg.model)
         if not initialize_pretrained:
             model_cfg.modules.vision_encoder.pretrained = False
+            if "weights" in model_cfg.modules.vision_encoder:
+                model_cfg.modules.vision_encoder.weights = None
             if "weights" in model_cfg.modules.action_decoder.plan_head:
                 model_cfg.modules.action_decoder.plan_head.weights = None
         self.model = instantiate(model_cfg)
@@ -133,7 +126,10 @@ class LitModel(L.LightningModule):
         x = x.to(self.device, non_blocking=True)
         batch_size, seq_len = x.shape[:2]
         effective_batch_size = batch_size * seq_len
-        targets = build_targets(batch)
+        reduction = self.model.action_decoder.temporal_encoder.reduction
+        targets = build_targets(batch, action_reduction=reduction)
+        if reduction != "none":
+            effective_batch_size = batch_size
         route_patch = batch.get("route_patch")
         if route_patch is not None:
             route_patch = route_patch.to(self.device, non_blocking=True)

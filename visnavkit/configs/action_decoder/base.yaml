@@ -1,0 +1,8 @@
+# @package model.modules.action_decoder
+_target_: visnavkit.models.action_decoders.base.ActionDecoder
+plan_head:
+  num_modes: 5
+  num_pts: ${plan_len_points}
+  feat_size: ${model.feat_size}
+  pose_size: 3 # x, y, v
+  dropout: 0.1

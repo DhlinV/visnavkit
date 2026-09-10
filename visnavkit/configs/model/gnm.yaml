@@ -3,16 +3,7 @@
 # fixed-horizon setting (no goal image, x/y/v targets).
 defaults:
   - base
+  - override /vision_encoder@_global_.vision_encoder: cnn_mobilenet
+  - override /action_decoder@_global_.action_decoder: waypoint
+  - override /temporal_encoder@_global_.temporal_encoder: identity
   - _self_
-
-modules:
-  vision_encoder:
-    backbone_name: mobilenetv2_100
-    out_indices: [2, 3, 4]
-    act_layer: null # keep the backbone's native activations for pretrained weights
-  action_decoder:
-    temporal_encoder:
-      num_layers: 0
-    plan_head:
-      _target_: visnavkit.models.heads.waypoint_head.WaypointHead
-      num_modes: 1

@@ -1,0 +1,5 @@
+# @package model.modules.action_decoder.temporal_encoder
+defaults:
+  - causal
+  - _self_
+num_layers: 4

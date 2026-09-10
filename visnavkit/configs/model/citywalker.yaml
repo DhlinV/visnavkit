@@ -3,12 +3,6 @@
 # goal-free, fixed-horizon setting (no goal coordinates).
 defaults:
   - dinov2
+  - override /action_decoder@_global_.action_decoder: waypoint
+  - override /temporal_encoder@_global_.temporal_encoder: causal_4layer
   - _self_
-
-modules:
-  action_decoder:
-    temporal_encoder:
-      num_layers: 4
-    plan_head:
-      _target_: visnavkit.models.heads.waypoint_head.WaypointHead
-      num_modes: 1

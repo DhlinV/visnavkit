@@ -36,7 +36,11 @@ class E2EModel(nn.Module):
 
         step = export_cfg.seq_step
         seq_len = export_cfg.seq_len
-        self.feature_idxs = torch.tensor(range(-(seq_len - 1) * step, 0, step))
+        if step < 1 or seq_len < 1:
+            raise ValueError("export_cfg.seq_step and seq_len must be positive")
+        self.register_buffer(
+            "feature_idxs", torch.arange(-(seq_len - 1) * step, 0, step, dtype=torch.long), persistent=False
+        )
         self.export_heads = []
         self._trainable_modules = trainable_modules or []
 
@@ -66,7 +70,7 @@ class E2EModel(nn.Module):
     def train(self, mode: bool = True):
         super().train(mode)
         if mode and self._trainable_modules:
-            for module in self.modules():
+            for module in self.children():
                 module.eval()
             for name, module in self.named_modules():
                 if any(trainable in name for trainable in self._trainable_modules):
@@ -92,8 +96,8 @@ class E2EModel(nn.Module):
         # Training: full sequence of frames
         if fb is None:
             B, F, C, H, W = x.shape
-            vision_outputs = self.vision_encoder(x.view(B * F, C, H, W))
-            decoder_input = vision_outputs["feat_out"].view(B, F, self.feat_size)
+            vision_outputs = self.vision_encoder(x.reshape(B * F, C, H, W))
+            decoder_input = vision_outputs["feat_out"].reshape(B, F, self.feat_size)
             decoder_input = self._append_route_embeddings(decoder_input, route_patch)
             action_outputs = self.action_decoder(decoder_input)
             return dict(vision=vision_outputs, action=action_outputs)

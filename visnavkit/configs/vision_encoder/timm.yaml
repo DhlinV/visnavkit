@@ -1,0 +1,8 @@
+# @package model.modules.vision_encoder
+defaults:
+  - base
+  - _self_
+_target_: visnavkit.models.spatial_encoders.vision_encoders.timm.TimmVisionEncoder
+backbone_name: fastvit_t8
+out_indices: [1, 2, 3]
+act_layer: gelu_tanh

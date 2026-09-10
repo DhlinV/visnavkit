@@ -1,6 +1,9 @@
 defaults:
   - dataset: null
   - optimizer: adamw
+  - vision_encoder: vit_fastvit
+  - action_decoder: mhp
+  - temporal_encoder: causal
   - model: base
   - metrics: open_loop
   - _self_

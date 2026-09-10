@@ -6,23 +6,29 @@
 import sys
 
 import torch
-from hydra import compose, initialize
+from hydra import compose, initialize_config_module
 from hydra.utils import instantiate
 
-# args are hydra overrides (a bare first arg means experiment=<arg>), e.g.
-#   uv run python -m visnavkit.scripts.smoke_forward experiment=baseline model=base
-overrides = [a if "=" in a else f"experiment={a}" for a in sys.argv[1:]]
-with initialize(version_base=None, config_path="../configs"):
-    cfg = compose(config_name="train", overrides=overrides)
+def main(argv=None):
+    """Run configured components on random RGB pairs without downloading weights."""
+    args = sys.argv[1:] if argv is None else argv
+    overrides = [a if "=" in a else f"experiment={a}" for a in args]
+    with initialize_config_module(version_base=None, config_module="visnavkit.configs"):
+        cfg = compose(config_name="train", overrides=overrides)
+    cfg.model.modules.vision_encoder.pretrained = False
 
-B, S = 2, cfg.common.seq_length
-w, h = (d // cfg.common.downscale_factor for d in cfg.common.crop_wh)
+    batch, frames = 2, cfg.common.seq_length
+    width, height = (d // cfg.common.downscale_factor for d in cfg.common.crop_wh)
 
-model = instantiate(cfg.model).eval()
-x = torch.rand(B, S, cfg.model.modules.vision_encoder.in_chans, h, w)
-with torch.no_grad():
-    y = model(x)
+    model = instantiate(cfg.model).eval()
+    x = torch.rand(batch, frames, cfg.model.modules.vision_encoder.in_chans, height, width)
+    with torch.no_grad():
+        y = model(x)
 
-print(f"{cfg.exp_name}: x {tuple(x.shape)}")
-print("plan:", {k: tuple(v.shape) for k, v in y["action"]["plan"].items()})
-print("pose:", tuple(y["vision"]["pose"].shape))
+    print(f"{cfg.exp_name}: x {tuple(x.shape)}")
+    print("plan:", {k: tuple(v.shape) for k, v in y["action"]["plan"].items()})
+    print("pose:", tuple(y["vision"]["pose"].shape))
+
+
+if __name__ == "__main__":
+    main()

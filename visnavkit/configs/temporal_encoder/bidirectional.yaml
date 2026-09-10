@@ -1,0 +1,8 @@
+# @package model.modules.action_decoder.temporal_encoder
+defaults:
+  - base
+  - _self_
+_target_: visnavkit.models.temporal_encoders.bidirectional.BidirectionalTemporalEncoder
+# One decision after observing the entire window; no earlier-frame target leakage.
+reduction: last
+mask_p: 0.0
