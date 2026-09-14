@@ -1,0 +1,15 @@
+# Corpus tooling: preprocess, cache, stats, anchors, plot, visualize. Shares train.yaml, so the
+# window definition, action space and goal type are exactly the ones training will use.
+defaults:
+  - train
+  - _self_
+
+command: cache
+split: train
+output_dir: outputs/dataset
+name: actions  # output prefix; give each corpus its own so their statistics never mix
+samples: 4  # visualize
+num_anchors: 16  # anchors
+normalizer_mode: meanstd  # stats: meanstd | minmax
+val_fraction: 0.1  # preprocess
+manifest_dir: null  # preprocess: defaults to common.data_root

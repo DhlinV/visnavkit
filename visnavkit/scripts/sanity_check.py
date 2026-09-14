@@ -17,6 +17,15 @@ from hydra.utils import instantiate
 from visnavkit.models.lit_model import build_targets, disable_pretrained_downloads
 
 
+def _params(module) -> str:
+    """Trainable / total parameters of one stage, so the diagram also sizes the model."""
+    total = sum(p.numel() for p in module.parameters())
+    trainable = sum(p.numel() for p in module.parameters() if p.requires_grad)
+    scale = "M" if total >= 1e6 else "k"
+    divisor = 1e6 if total >= 1e6 else 1e3
+    return f"{trainable / divisor:.2f}/{total / divisor:.2f}{scale} params"
+
+
 def _goal_shapes(goal):
     if goal is None:
         return []
@@ -41,22 +50,25 @@ def _pipeline(model, vision, goal, modalities, output, cfg):
     )
     modality_lines = [
         f"+-- modality '{name}': {type(model.modality_encoders[name]).__name__} "
+        f"({_params(model.modality_encoders[name])}) "
         f"{[list(modalities[key].shape) for key in model.modality_encoders[name].input_names]}"
         f" -> tokens {list(tokens.shape)}"
         for name, tokens in (output.modality_tokens or {}).items()
     ] or ["+-- modalities: (none)"]
     lines = [
-        type(model).__name__,
+        f"{type(model).__name__} ({_params(model)})",
         "|",
         f"+-- vision {list(vision.shape)}  [batch, frames, RGB, height, width]",
         f"|   `-- flatten frames -> {[batch * sequence, channels, height, width]}",
-        f"+-- vision_encoder: {type(model.vision_encoder).__name__} ({cfg.model.vision_encoder.backbone_name}, {model.vision_encoder.token_mode})",
+        f"+-- vision_encoder: {type(model.vision_encoder).__name__} ({cfg.model.vision_encoder.backbone_name},"
+        f" {model.vision_encoder.token_mode}, {_params(model.vision_encoder)})",
         f"|   `-- tokens -> {list(tokens.shape)}  [frames, tokens per frame, feat_size]",
         *modality_lines,
-        f"+-- temporal_encoder: {type(model.temporal_encoder).__name__}",
+        f"+-- temporal_encoder: {type(model.temporal_encoder).__name__} ({_params(model.temporal_encoder)})",
         f"|   `-- reduction={model.temporal_encoder.reduction} -> {list(context.shape)}  [batch, decisions, tokens, feat_size]",
-        f"+-- goal_encoder: {goal_names} {goal_line}",
-        f"`-- action_decoder: {type(decoder).__name__} ({decoder.action_space.kind}, {decoder.num_modes} modes)",
+        f"+-- goal_encoder: {goal_names} {goal_line} ({_params(model.goal_encoders)})",
+        f"`-- action_decoder: {type(decoder).__name__} ({decoder.action_space.kind}, {decoder.num_modes} modes,"
+        f" {_params(decoder)})",
     ]
     if model.vision_encoder.has_speed_head:
         lines.insert(6, f"|   `-- speed (auxiliary) -> {list(output.vision.speed.shape)}")

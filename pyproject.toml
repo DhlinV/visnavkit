@@ -21,6 +21,7 @@ dependencies = [
 dali = ["nvidia-dali-cuda130~=1.53.0; sys_platform == 'linux'"]
 wandb = ["wandb>=0.26.0"]
 export = ["onnxslim>=0.1.43"]
+plot = ["matplotlib>=3.9.3"]
 
 [project.scripts]
 visnavkit-train = "visnavkit.scripts.train:main"
@@ -28,6 +29,7 @@ visnavkit-export = "visnavkit.scripts.export:main"
 visnavkit-benchmark = "visnavkit.scripts.benchmark:main"
 visnavkit-benchmark-data = "visnavkit.scripts.benchmark_dataloader:main"
 visnavkit-sanity-check = "visnavkit.scripts.sanity_check:main"
+visnavkit-dataset = "visnavkit.scripts.dataset.cli:main"
 
 [dependency-groups]
 dev = [

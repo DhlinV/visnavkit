@@ -123,6 +123,22 @@ Anything that only reselects one group is an override, not a recipe:
 
 ## Data
 
+Prepare, inspect and measure a corpus with one entry point; everything after `cache` reads the
+cached window targets instead of decoding video again:
+
+```bash
+uv run visnavkit-dataset command=preprocess                      # validate clips, write manifests
+uv run visnavkit-dataset command=visualize dataset=torch         # what the policy is actually fed
+uv run visnavkit-dataset command=cache     dataset=torch         # window targets, no decode
+uv run visnavkit-dataset command=stats     dataset=torch name=city   # normalizer NPZ + plots
+uv run visnavkit-dataset command=anchors   dataset=torch num_anchors=16
+```
+
+`stats` writes the NPZ that `model.action_decoder.normalizer.stats_path` reads and `anchors` the
+one `model.action_decoder.anchors.anchors_path` reads. Both are named after `name`, so several
+corpora keep separate statistics — which is what a multi-dataset run needs, since mixing
+datasets must not mean mixing their normalization.
+
 Each clip is a directory with `video.mp4` and NumPy sidecars: `frame_times.npy` (int64 ns,
 strictly increasing), `frame_positions.npy` (N, 3) metres, `frame_orientations.npy` (N, 4)
 wxyz quaternions, `frame_speeds.npy` (N,). Manifests list `video_path label start end` rows.
@@ -166,7 +182,7 @@ instead and outputs `trajectories`, `scores` (plus `speed`).
 ```bash
 uv run pytest tests/ -q
 uv run ruff check visnavkit tests
-uv run python -m visnavkit.scripts.smoke_forward model=nomad
+uv run visnavkit-sanity-check model=nomad      # architecture, parameter counts, shapes
 ```
 
 Layout: [`models/vision`](visnavkit/models/vision/) · [`models/temporal`](visnavkit/models/temporal/) ·

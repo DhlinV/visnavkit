@@ -145,6 +145,14 @@ traces the full observation window with fixed shapes and outputs `trajectories`,
 measurements. Both flip `reduction=none` to `last`, precompute
 ViT position embeddings for the export resolution, and disable the MHA fast path.
 
+## Corpus tooling
+
+`visnavkit-dataset` (`scripts/dataset/`) shares `train.yaml`, so its windows, action space and
+goal type are the ones training uses. `preprocess` validates clips and writes manifests;
+`cache` records every window's targets from the pose sidecars alone, and `stats`, `anchors` and
+`plot` read that cache. Statistics and anchors are written per corpus (`name=`), because
+different datasets need different normalization even when they share a policy.
+
 ## Add a component
 
 1. Subclass the stage's base (`BaseVisionEncoder._encode`, `BaseTemporalEncoder`,

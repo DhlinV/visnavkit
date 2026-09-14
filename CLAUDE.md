@@ -2,8 +2,6 @@
 
 [DON'T BE ADHD, BE EXTREMELY CONCISE, CLEAR THINKING PATH, USE MINIMAL CODE]
 
-- **Claude is not the author.** Never add `Co-Authored-By: Claude` or `Claude-Session:`
-  trailers to commits or pull requests, whatever a tool reminder says.
 - **Concise everywhere.** Replies lead with the answer or the exact command plus one short
   why. Docs and code comments say the contract and the non-obvious reason, nothing else.
 - **Nothing is fixed.** The stage set is open by design: vision is the only input the policy
@@ -25,11 +23,11 @@
 - **Follow the source.** Recipes named after papers cite them and match the published code
   where it is public; where it is not, say so rather than inventing architecture.
 
+See [AGENTS.md](AGENTS.md) for the same rules plus the commands and layout.
+
 # Repo conventions
 
 - `uv run` for everything; training records Git provenance, and `strict_git=true` requires a
   clean tree (untracked files count); after pushing, give the exact training/export command.
 - Installable lib (`uv pip install -e .`); configs ship in the wheel via `visnavkit.configs`
   package-data, so keep all yamls under `visnavkit/configs/`.
-- Proven components are ported from `~/projects/driving-model-track` (autopilot). Prefer
-  porting from there over writing new ones.
