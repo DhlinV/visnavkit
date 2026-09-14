@@ -3,7 +3,7 @@
 python -m visnavkit.scripts.sanity_check
 python -m visnavkit.scripts.sanity_check model/vision_encoder=resnet18 model/temporal_encoder=bidirectional
 python -m visnavkit.scripts.sanity_check --onnx model/action_decoder=flow_dit model/goal_encoder=point
-python -m visnavkit.scripts.sanity_check model/ego_encoder=state model/camera_encoder=pinhole
+python -m visnavkit.scripts.sanity_check model/modality_encoder=ego_camera
 """
 
 import argparse
@@ -23,11 +23,11 @@ def _goal_shapes(goal):
     return [list(g.shape) if g is not None else None for g in (goal if isinstance(goal, list) else [goal])]
 
 
-def _pipeline(model, vision, goal, ego, intrinsics, output, cfg):
+def _pipeline(model, vision, goal, modalities, output, cfg):
     batch, sequence, channels, height, width = vision.shape
     tokens = output.vision.tokens
     per_frame = tokens.reshape(batch, sequence, model.vision_tokens, model.feat_size)
-    per_frame = model._per_frame_tokens(per_frame, output.ego_tokens, output.camera_tokens, dim=2)
+    per_frame = model._per_frame_tokens(per_frame, output.modality_tokens or {}, dim=2)
     context = model.temporal_encoder(per_frame)
     plans = output.plan.plans
     decoder = model.action_decoder
@@ -39,16 +39,12 @@ def _pipeline(model, vision, goal, ego, intrinsics, output, cfg):
         if output.goal_tokens is None
         else f"{goal_shapes} -> tokens {list(output.goal_tokens.shape)}"
     )
-    ego_line = (
-        "(no ego tokens)"
-        if output.ego_tokens is None
-        else f"ego {list(ego.shape)} -> tokens {list(output.ego_tokens.shape)}"
-    )
-    camera_line = (
-        "(no camera tokens)"
-        if output.camera_tokens is None
-        else f"intrinsics {list(intrinsics.shape)} + extrinsics -> tokens {list(output.camera_tokens.shape)}"
-    )
+    modality_lines = [
+        f"+-- modality '{name}': {type(model.modality_encoders[name]).__name__} "
+        f"{[list(modalities[key].shape) for key in model.modality_encoders[name].input_names]}"
+        f" -> tokens {list(tokens.shape)}"
+        for name, tokens in (output.modality_tokens or {}).items()
+    ] or ["+-- modalities: (none)"]
     lines = [
         type(model).__name__,
         "|",
@@ -56,8 +52,7 @@ def _pipeline(model, vision, goal, ego, intrinsics, output, cfg):
         f"|   `-- flatten frames -> {[batch * sequence, channels, height, width]}",
         f"+-- vision_encoder: {type(model.vision_encoder).__name__} ({cfg.model.vision_encoder.backbone_name}, {model.vision_encoder.token_mode})",
         f"|   `-- tokens -> {list(tokens.shape)}  [frames, tokens per frame, feat_size]",
-        f"+-- ego_encoder: {type(model.ego_encoder).__name__} {ego_line}",
-        f"+-- camera_encoder: {type(model.camera_encoder).__name__} {camera_line}",
+        *modality_lines,
         f"+-- temporal_encoder: {type(model.temporal_encoder).__name__}",
         f"|   `-- reduction={model.temporal_encoder.reduction} -> {list(context.shape)}  [batch, decisions, tokens, feat_size]",
         f"+-- goal_encoder: {goal_names} {goal_line}",
@@ -87,18 +82,17 @@ def _newest_goal(model, goal):
 
 
 @torch.no_grad()
-def _check_feature_buffer(model, vision, goal, ego, camera, seq_step):
+def _check_feature_buffer(model, vision, goal, modalities, seq_step):
     exported = copy.deepcopy(model).eval()
     temporal = exported.temporal_encoder
     if temporal.reduction == "none":
         temporal.reduction = "last"
     batch, sequence = vision.shape[:2]
     noise = exported.action_decoder.example_noise(batch) if exported.action_decoder.uses_noise else None
-    expected = exported(vision, goal=goal, ego=ego, **camera, noise=noise)
+    expected = exported(vision, goal=goal, noise=noise, **modalities)
     features = model._per_frame_tokens(
         expected.vision.tokens.reshape(batch, sequence, model.vision_tokens, model.feat_size),
-        expected.ego_tokens,
-        expected.camera_tokens,
+        expected.modality_tokens or {},
         dim=2,
     ).flatten(2)
     history_size = (sequence - 1) * seq_step
@@ -109,9 +103,8 @@ def _check_feature_buffer(model, vision, goal, ego, camera, seq_step):
         vision[:, -1],
         buffer,
         goal=_newest_goal(exported, goal),
-        ego=None if ego is None else ego[:, -1],
-        **{name: None if value is None else value[:, -1] for name, value in camera.items()},
         noise=noise,
+        **{name: value[:, -1] for name, value in modalities.items()},
     )
     plans, token = outputs[0], outputs[1]
     torch.testing.assert_close(plans, expected.plan.plans, rtol=2e-4, atol=2e-5)
@@ -146,14 +139,13 @@ def main(argv=None):
     width, height = (int(value // cfg.common.downscale_factor) for value in cfg.common.crop_wh)
     if batch * sequence < 2:
         parser.error("Training BatchNorm requires batch-size * common.seq_length >= 2")
-    vision, goal, ego, intrinsics, extrinsics = model.example_batch(batch, sequence, (height, width))
-    camera = dict(intrinsics=intrinsics, extrinsics=extrinsics)
+    vision, goal, modalities = model.example_batch(batch, sequence, (height, width))
     decoder = model.action_decoder
     reduction = model.temporal_encoder.reduction
     decisions = batch * sequence if reduction == "none" else batch
 
     with torch.no_grad():
-        output = model(vision, goal=goal, ego=ego, **camera)
+        output = model(vision, goal=goal, **modalities)
         assert tuple(output.vision.tokens.shape) == (batch * sequence, model.vision_tokens, model.feat_size), (
             "Unexpected token shape"
         )
@@ -163,7 +155,7 @@ def main(argv=None):
         plans = output.plan.plans
         assert tuple(plans.shape) == (decisions, decoder.flat_size), "Unexpected action output shape"
         assert torch.isfinite(plans).all(), "Nonfinite action outputs"
-        diagram = _pipeline(model, vision, goal, ego, intrinsics, output, cfg)
+        diagram = _pipeline(model, vision, goal, modalities, output, cfg)
     print(diagram)
     print("\n[PASS] Forward shapes and finite outputs")
 
@@ -176,7 +168,7 @@ def main(argv=None):
         action_reduction=reduction,
     )
     model.zero_grad(set_to_none=True)
-    losses, _ = model.get_losses(model(vision, goal=goal, ego=ego, **camera), targets)
+    losses, _ = model.get_losses(model(vision, goal=goal, **modalities), targets)
     assert all(torch.isfinite(value).all() for value in losses.values()), "Nonfinite training loss"
     losses["loss"].backward()
     gradients = [parameter.grad for parameter in model.parameters() if parameter.grad is not None]
@@ -186,7 +178,7 @@ def main(argv=None):
     model.zero_grad(set_to_none=True)
     model.eval()
     history_size, export_reduction = _check_feature_buffer(
-        model, vision, goal, ego, camera, int(cfg.model.export_cfg.seq_step)
+        model, vision, goal, modalities, int(cfg.model.export_cfg.seq_step)
     )
     print(f"[PASS] Feature-buffer parity (history={history_size}, reduction={export_reduction})")
     args.output_dir.mkdir(parents=True, exist_ok=True)

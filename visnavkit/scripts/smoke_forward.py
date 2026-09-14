@@ -29,14 +29,12 @@ def main(argv=None):
     batch, frames = 2, cfg.common.seq_length
     width, height = (d // cfg.common.downscale_factor for d in cfg.common.crop_wh)
     model = instantiate(cfg.model).eval()
-    vision, goal, ego, intrinsics, extrinsics = model.example_batch(batch, frames, (height, width))
+    vision, goal, modalities = model.example_batch(batch, frames, (height, width))
     with torch.no_grad():
-        y = model(vision, goal=goal, ego=ego, intrinsics=intrinsics, extrinsics=extrinsics)
+        y = model(vision, goal=goal, **modalities)
 
-    print(
-        f"{cfg.exp_name}: vision {tuple(vision.shape)} goal {_shapes(goal)} ego {_shapes(ego)} "
-        f"camera {_shapes(intrinsics)}/{_shapes(extrinsics)}"
-    )
+    inputs = " ".join(f"{name} {_shapes(value)}" for name, value in modalities.items())
+    print(f"{cfg.exp_name}: vision {tuple(vision.shape)} goal {_shapes(goal)} {inputs}")
     print("plan:", {k: tuple(v.shape) for k, v in y.plan.items() if torch.is_tensor(v)})
     print("tokens:", tuple(y.vision.tokens.shape), "speed:", _shapes(y.vision.speed))
 

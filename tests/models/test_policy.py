@@ -5,6 +5,28 @@ import torch
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 
+from visnavkit.models.modality import BaseModalityEncoder
+
+
+class SpatialEncoder(BaseModalityEncoder):
+    """Stand-in for a user-supplied spatial stage: a (B, F, C, H, W) raster -> tokens."""
+
+    input_names = ("occupancy",)
+
+    def __init__(self, feat_size, channels=4, num_tokens=1, **kwargs):
+        super().__init__(feat_size, num_tokens=num_tokens, **kwargs)
+        self.channels = channels
+        self.proj = torch.nn.Linear(channels, num_tokens * feat_size)
+
+    def encode(self, occupancy, *, image_hw=None):
+        b, f = occupancy.shape[:2]
+        pooled = occupancy.mean(dim=(-2, -1))
+        return self.proj(pooled).reshape(b, f, self.num_tokens, self.feat_size)
+
+    def example_inputs(self, batch_size, frames=1, image_hw=(64, 64), device=None):
+        return (torch.zeros(batch_size, frames, self.channels, 8, 8, device=device),)
+
+
 TEMPORAL = {
     "causal": "causal.CausalTemporalEncoder",
     "bidirectional": "bidirectional.BidirectionalTemporalEncoder",
@@ -25,6 +47,27 @@ GOAL = {
         "hidden": 16,
     },
 }
+
+
+def MODALITIES(ego=False, camera=False):
+    """The policy takes an open {name: encoder} mapping; slots are just config entries."""
+    encoders = {}
+    if ego:
+        encoders["ego"] = {
+            "_target_": "visnavkit.models.modality.vector.VectorEncoder",
+            "feat_size": 8,
+            "in_dim": 2,
+            "hidden": 16,
+        }
+    if camera:
+        encoders["camera"] = {
+            "_target_": "visnavkit.models.modality.camera.PinholeCameraEncoder",
+            "feat_size": 8,
+            "hidden": 16,
+        }
+    return encoders
+
+
 DECODER = {
     "regression": {"_target_": "visnavkit.models.action.regression.RegressionDecoder", "hidden": 16},
     "mhp": {"_target_": "visnavkit.models.action.mhp.MHPDecoder", "num_modes": 2, "hidden": 16},
@@ -113,16 +156,7 @@ def policy_config(
                 if isinstance(goal, list)
                 else {"feat_size": 8, **GOAL[goal]}
             ),
-            "ego_encoder": (
-                {"_target_": "visnavkit.models.ego.state.EgoStateEncoder", "feat_size": 8, "in_dim": 2, "hidden": 16}
-                if ego
-                else {"_target_": "visnavkit.models.ego.none.NoEgoEncoder", "feat_size": 8}
-            ),
-            "camera_encoder": (
-                {"_target_": "visnavkit.models.camera.pinhole.PinholeCameraEncoder", "feat_size": 8, "hidden": 16}
-                if camera
-                else {"_target_": "visnavkit.models.camera.none.NoCameraEncoder", "feat_size": 8}
-            ),
+            "modality_encoders": MODALITIES(ego, camera),
             "action_decoder": {
                 "feat_size": 8,
                 "action_space": {
@@ -163,9 +197,9 @@ def test_policy_trains_end_to_end(temporal, goal, decoder, reduction, token_mode
             speed_head=True,
         )
     ).train()
-    vision, goal_batch, ego_batch, intrinsics, extrinsics = model.example_batch(2, 3, (32, 32))
+    vision, goal_batch, modalities = model.example_batch(2, 3, (32, 32))
     vision.requires_grad_(True)
-    out = model(vision, goal=goal_batch, ego=ego_batch, intrinsics=intrinsics, extrinsics=extrinsics)
+    out = model(vision, goal=goal_batch, **modalities)
     decisions = 6 if reduction == "none" else 2
     goal_names = goal if isinstance(goal, list) else [goal]
     expected_goal_tokens = sum(name != "none" for name in goal_names)
@@ -174,8 +208,7 @@ def test_policy_trains_end_to_end(temporal, goal, decoder, reduction, token_mode
     assert out.vision.speed.shape == (6, 1)
     assert out.vision.tokens.shape == (6, model.vision_tokens, 8)
     assert model.num_tokens == model.vision_tokens + (1 if ego else 0) + (1 if camera else 0)
-    assert (out.ego_tokens is None) == (not ego)
-    assert (out.camera_tokens is None) == (not camera)
+    assert set(out.modality_tokens or {}) == {n for n, on in (("ego", ego), ("camera", camera)) if on}
     assert out.goal_tokens is None or out.goal_tokens.shape == (decisions, expected_goal_tokens, 8)
     assert (out.goal_tokens is None) == (expected_goal_tokens == 0)
     assert out.plan.plans.shape == (decisions, model.action_decoder.flat_size)
@@ -217,7 +250,7 @@ def test_feature_buffer_matches_full_observation_window(
         )
     ).eval()
     history = (seq_len - 1) * seq_step
-    dense, goal_batch, ego_batch, intrinsics, extrinsics = model.example_batch(2, history + 1, (32, 32))
+    dense, goal_batch, modalities = model.example_batch(2, history + 1, (32, 32))
     window = dense[:, ::seq_step]
     goals = goal_batch if isinstance(goal_batch, list) else [goal_batch]
     window_goals = [
@@ -232,25 +265,18 @@ def test_feature_buffer_matches_full_observation_window(
     with torch.no_grad():
         encoded = model._per_frame_tokens(
             model.encode_frames(dense).tokens.reshape(2, history + 1, model.vision_tokens, 8),
-            model.encode_ego(ego_batch, 2, history + 1),
-            model.encode_camera(intrinsics, extrinsics, 2, history + 1, (32, 32)),
+            model.encode_modalities(modalities, 2, history + 1, (32, 32)),
             dim=2,
         ).flatten(2)
-        strided = {
-            "ego": None if not ego else ego_batch[:, ::seq_step],
-            "intrinsics": None if not camera else intrinsics[:, ::seq_step],
-            "extrinsics": None if not camera else extrinsics[:, ::seq_step],
-        }
-        full = model(window, goal=window_goals, **strided, noise=noise)
+        strided = {name: value[:, ::seq_step] for name, value in modalities.items()}
+        full = model(window, goal=window_goals, noise=noise, **strided)
         expected = full.plan.plans if reduction != "none" else full.plan.plans.reshape(2, seq_len, -1)[:, -1]
         plan, token, speed = model.predict(
             dense[:, -1],
             encoded[:, :-1],
             goal=newest,
-            ego=None if not ego else ego_batch[:, -1],
-            intrinsics=None if not camera else intrinsics[:, -1],
-            extrinsics=None if not camera else extrinsics[:, -1],
             noise=noise,
+            **{name: value[:, -1] for name, value in modalities.items()},
         )
     assert model.export_output_names() == ["plan", "feat_out", "speed"]
     goal_inputs = ["goal"] if len(live) == 1 else [f"goal_{i}" for i in range(len(live))]
@@ -281,29 +307,48 @@ def test_goal_shape_validation_and_null_goal():
 def test_camera_validation_and_null_token():
     model = instantiate(policy_config("causal", "none", "regression", reduction="last", camera=True)).eval()
     frames = torch.rand(2, 3, 3, 32, 32)
-    assert model.camera_tokens == 1 and model.num_tokens == model.vision_tokens + 1
+    assert model.modality_tokens == 1 and model.num_tokens == model.vision_tokens + 1
     with pytest.raises(ValueError, match=r"Intrinsics must be \(B, F, 3, 3\)"):
         model(frames, intrinsics=torch.eye(3).repeat(2, 3, 1, 1)[..., :2], extrinsics=torch.eye(4).repeat(2, 3, 1, 1))
     out = model(frames)  # missing calibration -> learned null token
-    torch.testing.assert_close(out.camera_tokens, model.camera_encoder.null_token.repeat(2, 3, 1, 1))
+    encoder = model.modality_encoders["camera"]
+    torch.testing.assert_close(out.modality_tokens["camera"], encoder.null_token.repeat(2, 3, 1, 1))
     # Intrinsics are normalized by the live frame size, so the same K at twice the resolution
     # (and twice the focal length / principal point) yields the same tokens.
-    small = model.camera_encoder.example_input(2, 3, (32, 32))
-    large = model.camera_encoder.example_input(2, 3, (64, 64))
+    small = encoder.example_inputs(2, 3, (32, 32))
+    large = encoder.example_inputs(2, 3, (64, 64))
     torch.testing.assert_close(
-        model(frames, intrinsics=small[0], extrinsics=small[1]).camera_tokens,
-        model(torch.rand(2, 3, 3, 64, 64), intrinsics=large[0], extrinsics=large[1]).camera_tokens,
+        model(frames, intrinsics=small[0], extrinsics=small[1]).modality_tokens["camera"],
+        model(torch.rand(2, 3, 3, 64, 64), intrinsics=large[0], extrinsics=large[1]).modality_tokens["camera"],
     )
 
 
 def test_ego_status_validation_and_null_token():
     model = instantiate(policy_config("causal", "none", "regression", reduction="last", ego=True)).eval()
     frames = torch.rand(2, 3, 3, 32, 32)
-    assert model.ego_tokens == 1 and model.num_tokens == model.vision_tokens + 1
-    with pytest.raises(ValueError, match=r"\(B, F, 2\)"):
+    assert model.modality_tokens == 1 and model.num_tokens == model.vision_tokens + 1
+    with pytest.raises(ValueError, match=r"ego must be \(B, F, 2\)"):
         model(frames, ego=torch.zeros(2, 3, 5))
+    with pytest.raises(ValueError, match="Unknown policy inputs"):
+        model(frames, lidar=torch.zeros(2, 3, 5))
     out = model(frames)  # missing ego status -> learned null token
-    torch.testing.assert_close(out.ego_tokens, model.ego_encoder.null_token.repeat(2, 3, 1, 1))
+    encoder = model.modality_encoders["ego"]
+    torch.testing.assert_close(out.modality_tokens["ego"], encoder.null_token.repeat(2, 3, 1, 1))
+
+
+def test_a_new_modality_needs_no_policy_change():
+    """A spatial encoder is just another {name: encoder} entry with its own batch keys."""
+    config = policy_config("causal", "none", "regression", reduction="last")
+    model = instantiate(config, modality_encoders={"spatial": SpatialEncoder(8, num_tokens=2)}).eval()
+    assert model.modality_input_names == ["occupancy"]
+    assert model.num_tokens == model.vision_tokens + 2
+    assert model.export_input_names() == ["vision", "feature_buffer", "occupancy"]
+
+    vision, _, modalities = model.example_batch(2, 3, (32, 32))
+    assert set(modalities) == {"occupancy"} and modalities["occupancy"].shape == (2, 3, 4, 8, 8)
+    out = model(vision, **modalities)
+    assert out.modality_tokens["spatial"].shape == (2, 3, 2, 8)
+    assert out.plan.plans.shape == (2, model.action_decoder.flat_size)
 
 
 def test_partial_training_uses_module_prefixes():

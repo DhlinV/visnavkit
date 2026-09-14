@@ -155,9 +155,12 @@ class LitModel(L.LightningModule):
         targets = build_targets(batch, action_reduction=reduction)
         if reduction != "none":
             effective_batch_size = batch_size
-        sides = {name: _to_device(batch.get(name), self.device) for name in ("goal", "ego", "intrinsics", "extrinsics")}
+        goal = _to_device(batch.get("goal"), self.device)
+        modalities = {
+            name: _to_device(batch[name], self.device) for name in self.model.modality_input_names if name in batch
+        }
 
-        y_hat = self.model(x, **sides)
+        y_hat = self.model(x, goal=goal, **modalities)
 
         loss_dict, loss_debug = self.model.get_losses(y_hat, targets)
 

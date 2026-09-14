@@ -137,15 +137,28 @@ def test_cli_smoke_and_analytic_control(tmp_path):
         assert completed.returncode == 0, completed.stdout + completed.stderr
 
     smoke = tmp_path / "smoke"
-    cli("command=smoke", "model=gnm", "common.crop_wh=[32,32]", "common.downscale_factor=1",
-        "common.seq_length=2", "samples=2", "runtime.warmup=1", "runtime.iterations=2", f"output_dir={smoke}")
+    cli(
+        "command=smoke",
+        "model=gnm",
+        "common.crop_wh=[32,32]",
+        "common.downscale_factor=1",
+        "common.seq_length=2",
+        "samples=2",
+        "runtime.warmup=1",
+        "runtime.iterations=2",
+        f"output_dir={smoke}",
+    )
     report = json.loads((smoke / "result.json").read_text())
     assert report["benchmark_config"]["command"] == "smoke"
     assert "revision" in report["code"]
     assert report["results"][1]["metrics"]["samples"] == 2
     control = tmp_path / "control"
-    cli("command=evaluate", "adapter.name=constant_velocity", f"dataset_archive={smoke / 'fixture.npz'}",
-        f"output_dir={control}")
+    cli(
+        "command=evaluate",
+        "adapter.name=constant_velocity",
+        f"dataset_archive={smoke / 'fixture.npz'}",
+        f"output_dir={control}",
+    )
     report = json.loads((control / "result.json").read_text())
     assert report["result_kind"] == "pipeline_check"
     assert (control / "results.csv").is_file()

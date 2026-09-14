@@ -1,2 +1,0 @@
-_target_: visnavkit.models.camera.none.NoCameraEncoder
-feat_size: ${model.feat_size}

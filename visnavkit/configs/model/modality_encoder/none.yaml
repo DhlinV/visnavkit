@@ -1,0 +1,3 @@
+# @package model.modality_encoders
+# No extra modalities: vision only. Slots are added by their own group files, or ad hoc with
+# +model.modality_encoders.<name>._target_=...

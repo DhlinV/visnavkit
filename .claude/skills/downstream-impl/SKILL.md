@@ -23,6 +23,7 @@ description: Implement downstream features in visnavkit (new components, dataset
 | `goal` (optional) | point (B, S, 3) · image (B, 3, h, w) uint8 · route_image (B, C, h, w) · instruction (B, E); a list when the recipe has several goal encoders | — |
 | `ego` (optional) | (B, S, E) — `common.ego_features` | float32 |
 | `intrinsics` / `extrinsics` (optional) | (B, S, 3, 3) / (B, S, 4, 4) — `common.use_camera` | float32 |
+| any other modality key | (B, S, ...) — whatever its encoder's `input_names` declare | — |
 
 `dataset=torch` (torchcodec, CPU) supports every goal type, goal lists, `common.ego_features` and `common.use_camera`; `dataset=dali` (GPU) supports `none`/`point` goals and speed-only ego. The dataset reads `goal_type` from `${model.goal_encoder.goal_type}` (set it explicitly when the recipe uses a list of goal encoders). Pose and goal targets come from `visnavkit/data/pose_targets.py` — reuse, never reimplement.
 
@@ -30,8 +31,8 @@ description: Implement downstream features in visnavkit (new components, dataset
 `models/vision` · `models/temporal` · `models/goal` · `models/action` (+ `denoisers/`, `schedulers/`) · `models/policy.py` (NavigationPolicy) · `models/lit_model.py` · `data/` · `evaluation/` · `benchmark/` · `scripts/` (thin entry points) · `configs/model/<group>/` mirrors the packages.
 
 ### Policy
-- Training: `policy(vision, goal=None, ego=None, intrinsics=None, extrinsics=None, noise=None)` with vision (B, S, 3, h, w) float in [0,1], ego (B, S, E), intrinsics (B, S, 3, 3), extrinsics (B, S, 4, 4) → `PolicyOutput(vision=VisionOutput(tokens (B*S, Kv, D), speed), plan=PlanOutput(plans (decisions, M*(2*T*P+1))), goal_tokens, ego_tokens, camera_tokens)`. Every non-vision input is optional and falls back to its encoder's null token.
-- Deployment: `policy.predict(frame, feature_buffer, goal=None, ego=None, intrinsics=None, extrinsics=None, noise=None)` — newest-frame side inputs carry no frame axis — → `(plan, feat_out, [speed], *heads)`; `export_input_names()` / `export_output_names()` define the ONNX contract and are presence-driven.
+- Training: `policy(vision, goal=None, noise=None, **modality_inputs)` with vision (B, S, 3, h, w) float in [0,1] and one keyword per modality batch key (ego (B, S, E), intrinsics (B, S, 3, 3), extrinsics (B, S, 4, 4), ...) → `PolicyOutput(vision=VisionOutput(tokens (B*S, Kv, D), speed), plan=PlanOutput(plans (decisions, M*(2*T*P+1))), goal_tokens, modality_tokens)`. Every non-vision input is optional and falls back to its encoder's null token.
+- Deployment: `policy.predict(frame, feature_buffer, goal=None, noise=None, **modality_inputs)` — newest-frame modality inputs carry no frame axis — → `(plan, feat_out, [speed], *heads)`; `export_input_names()` / `export_output_names()` define the ONNX contract and are presence-driven. A new input modality is a `BaseModalityEncoder` subclass declaring `input_names`; `policy.py` needs no change.
 - Losses: `policy.get_losses(out, targets)` combines `vision_encoder.get_losses` and `action_decoder.get_losses` with `loss_cfg` weights.
 
 ### Configs

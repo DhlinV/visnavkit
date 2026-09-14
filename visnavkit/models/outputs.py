@@ -63,5 +63,4 @@ class PolicyOutput(BaseOutput):
     vision: VisionOutput
     plan: PlanOutput
     goal_tokens: torch.Tensor | None = None
-    ego_tokens: torch.Tensor | None = None
-    camera_tokens: torch.Tensor | None = None
+    modality_tokens: dict | None = None

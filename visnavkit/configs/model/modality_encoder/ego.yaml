@@ -1,0 +1,11 @@
+# @package model.modality_encoders
+# Free-form per-frame ego status; in_dim must match the width the dataset packs into the `ego`
+# key (common.ego_features, e.g. [speed] -> 1, [speed, yaw_rate] -> 2).
+ego:
+  _target_: visnavkit.models.modality.vector.VectorEncoder
+  feat_size: ${model.feat_size}
+  key: ego
+  in_dim: 1
+  hidden: 128
+  num_tokens: 1
+  p_drop: 0.0  # modality dropout: also learn to act when the ego status is missing

@@ -3,8 +3,7 @@ defaults:
   - vision_encoder: fastvit_t8
   - temporal_encoder: causal
   - goal_encoder: none
-  - ego_encoder: none
-  - camera_encoder: none
+  - modality_encoder: none
   - action_decoder: mhp
   - _self_
 

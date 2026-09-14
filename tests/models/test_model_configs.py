@@ -169,9 +169,9 @@ def test_every_goal_encoder_group_runs(name):
     )
     disable_pretrained_downloads(cfg.model)
     model = instantiate(cfg.model).eval()
-    vision, goal, ego, *camera = model.example_batch(2, 3, (32, 32))
+    vision, goal, modalities = model.example_batch(2, 3, (32, 32))
     with torch.no_grad():
-        out = model(vision, goal=goal, ego=ego, intrinsics=camera[0], extrinsics=camera[1])
+        out = model(vision, goal=goal, **modalities)
     assert out.plan.plans.shape[0] == 6
     assert model.export_input_names() == ["vision", "feature_buffer"] + (["goal"] if name != "none" else [])
 
@@ -230,6 +230,33 @@ def test_large_vision_presets_compose(name):
     cfg = _compose(*SMALL, f"model/vision_encoder={name}")
     OmegaConf.to_container(cfg.model, resolve=True, throw_on_missing=True)
     assert cfg.model.vision_encoder.backbone_name
+
+
+@pytest.mark.parametrize(
+    "option, expected",
+    [
+        ("none", []),
+        ("ego", ["ego"]),
+        ("camera", ["intrinsics", "extrinsics"]),
+        ("ego_camera", ["ego", "intrinsics", "extrinsics"]),
+    ],
+)
+def test_modality_encoder_group_is_an_open_set(option, expected):
+    cfg = _compose(*SMALL, f"model/modality_encoder={option}", "model/vision_encoder=resnet18")
+    model = instantiate(cfg.model).eval()
+    assert model.modality_input_names == expected
+    assert model.num_tokens == model.vision_tokens + len(cfg.model.modality_encoders)
+    # A further slot is just another key, no policy or group file needed.
+    extra = _compose(
+        *SMALL,
+        f"model/modality_encoder={option}",
+        "model/vision_encoder=resnet18",
+        "+model.modality_encoders.imu._target_=visnavkit.models.modality.vector.VectorEncoder",
+        "+model.modality_encoders.imu.feat_size=${model.feat_size}",
+        "+model.modality_encoders.imu.key=imu",
+        "+model.modality_encoders.imu.in_dim=6",
+    )
+    assert instantiate(extra.model).modality_input_names == [*expected, "imu"]
 
 
 def test_ema_group_is_optional_and_builds_a_trainer_callback():

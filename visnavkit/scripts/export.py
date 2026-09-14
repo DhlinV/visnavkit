@@ -4,8 +4,8 @@
     uv run visnavkit-export checkpoint=null model=gnm  # untrained pipeline check
 
 Graph inputs are presence-driven: ``vision``, ``feature_buffer``, then one ``goal`` input per goal
-encoder, ``ego`` and ``intrinsics``/``extrinsics`` when the recipe consumes them, and ``noise``
-for generative decoders.
+encoder, one input per key its modality encoders read (``ego``, ``intrinsics``/``extrinsics``,
+...), and ``noise`` for generative decoders.
 Outputs: ``plan``, ``feat_out``, plus ``speed`` when the recipe enables the auxiliary speed head.
 """
 
@@ -81,14 +81,9 @@ class _ExportPolicy(nn.Module):
         kwargs = dict(zip(self.policy.export_input_names(), inputs))
         goal_names = self.policy.goal_input_names()
         goal = [kwargs[name] for name in goal_names] if len(goal_names) > 1 else kwargs.get("goal")
+        modalities = {name: kwargs[name] for name in self.policy.modality_input_names if name in kwargs}
         return self.policy.predict(
-            kwargs["vision"],
-            kwargs["feature_buffer"],
-            goal=goal,
-            ego=kwargs.get("ego"),
-            intrinsics=kwargs.get("intrinsics"),
-            extrinsics=kwargs.get("extrinsics"),
-            noise=kwargs.get("noise"),
+            kwargs["vision"], kwargs["feature_buffer"], goal=goal, noise=kwargs.get("noise"), **modalities
         )
 
 

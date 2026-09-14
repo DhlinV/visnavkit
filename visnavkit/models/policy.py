@@ -1,6 +1,6 @@
-"""NavigationPolicy: [vision, goal, ego status, calibration] -> context -> action decoder."""
+"""NavigationPolicy: vision + any number of modalities + goals -> context -> action decoder."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import torch
 import torch.nn as nn
@@ -21,7 +21,7 @@ def _matches(name: str, prefixes: list[str]) -> bool:
 
 
 def _add_frame_axis(value: torch.Tensor | None) -> torch.Tensor | None:
-    """Deployment passes the newest frame's side input without a frame axis."""
+    """Deployment passes the newest frame's modality input without a frame axis."""
     return value if value is None else value[:, None]
 
 
@@ -40,16 +40,18 @@ class NavigationPolicy(nn.Module):
     The policy takes the three raw inputs and owns the wiring between them:
 
     - ``vision`` ``(B, F, 3, H, W)`` RGB frames in [0, 1] -> per-frame vision tokens.
-    - ``ego`` ``(B, F, E)`` free-form ego status -> per-frame ego tokens, concatenated with the
-      vision tokens of the same frame, so the temporal encoder mixes both across time.
-    - ``intrinsics`` ``(B, F, 3, 3)`` and ``extrinsics`` ``(B, F, 4, 4)`` -> per-frame camera
-      tokens, joined the same way, so one policy can serve several camera rigs.
+    - ``modality_encoders`` is an open ``{name: encoder}`` mapping. Each encoder declares the
+      batch keys it reads (``ego``, ``intrinsics``/``extrinsics``, ``depth``, a spatial raster,
+      ...) and returns per-frame tokens that are concatenated with the vision tokens of the same
+      frame, so the temporal encoder mixes them across time and they travel in the deployment
+      feature buffer. Adding a modality needs no change here.
     - ``goal`` one goal per goal encoder -> goal tokens for the action decoder. ``goal_encoder``
       may be a list, in which case ``goal`` is the matching list and the tokens are concatenated.
 
-    Training: ``forward(vision, goal=None, ego=None, intrinsics=None, extrinsics=None, noise=None)``.
-    Deployment: ``predict(frame, feature_buffer, ...)`` encodes one frame and reuses past frame
-    tokens from the buffer ``(B, history, K * D)``.
+    Training: ``forward(vision, goal=None, noise=None, **modality_inputs)``.
+    Deployment: ``predict(frame, feature_buffer, goal=None, noise=None, **modality_inputs)``
+    encodes one frame and reuses past frame tokens from the buffer ``(B, history, K * D)``; the
+    newest frame's modality inputs are passed without a frame axis.
     """
 
     def __init__(
@@ -58,8 +60,7 @@ class NavigationPolicy(nn.Module):
         temporal_encoder: nn.Module,
         action_decoder: nn.Module,
         goal_encoder: nn.Module | Sequence[nn.Module] | None = None,
-        ego_encoder: nn.Module | None = None,
-        camera_encoder: nn.Module | None = None,
+        modality_encoders: Mapping[str, nn.Module] | None = None,
         feat_size: int = 256,
         loss_cfg: DictConfig | None = None,
         export_cfg: DictConfig | None = None,
@@ -68,12 +69,10 @@ class NavigationPolicy(nn.Module):
     ):
         super().__init__()
         goal_encoders = _as_list(goal_encoder)
+        modalities = {name: encoder for name, encoder in dict(modality_encoders or {}).items() if encoder is not None}
         modules = [("vision_encoder", vision_encoder), ("action_decoder", action_decoder)]
         modules += [(f"goal_encoders.{i}", encoder) for i, encoder in enumerate(goal_encoders)]
-        if ego_encoder is not None:
-            modules.append(("ego_encoder", ego_encoder))
-        if camera_encoder is not None:
-            modules.append(("camera_encoder", camera_encoder))
+        modules += [(f"modality_encoders.{name}", encoder) for name, encoder in modalities.items()]
         for name, module in modules:
             if getattr(module, "feat_size", feat_size) != feat_size:
                 raise ValueError(f"{name}.feat_size must equal model.feat_size={feat_size}")
@@ -82,8 +81,10 @@ class NavigationPolicy(nn.Module):
         self.vision_encoder = vision_encoder
         self.temporal_encoder = temporal_encoder
         self.goal_encoders = nn.ModuleList(goal_encoders)
-        self.ego_encoder = ego_encoder
-        self.camera_encoder = camera_encoder
+        self.modality_encoders = nn.ModuleDict(modalities)
+        duplicates = [name for name in self.modality_input_names if self.modality_input_names.count(name) > 1]
+        if duplicates:
+            raise ValueError(f"Modality encoders must read distinct batch keys; {sorted(set(duplicates))} repeat")
         self.action_decoder = action_decoder
         self.feat_size = feat_size
         self.loss_cfg = loss_cfg
@@ -132,12 +133,13 @@ class NavigationPolicy(nn.Module):
         return self.vision_encoder.num_tokens
 
     @property
-    def ego_tokens(self) -> int:
-        return 0 if self.ego_encoder is None else self.ego_encoder.num_tokens
+    def modality_tokens(self) -> int:
+        return sum(encoder.num_tokens for encoder in self.modality_encoders.values())
 
     @property
-    def camera_tokens(self) -> int:
-        return 0 if self.camera_encoder is None else self.camera_encoder.num_tokens
+    def modality_input_names(self) -> list[str]:
+        """Batch keys read by the modality encoders, in the order the export graph takes them."""
+        return [name for encoder in self.modality_encoders.values() for name in encoder.input_names]
 
     @property
     def goal_tokens(self) -> int:
@@ -146,7 +148,7 @@ class NavigationPolicy(nn.Module):
     @property
     def num_tokens(self) -> int:
         """Tokens per frame entering the temporal encoder."""
-        return self.vision_tokens + self.ego_tokens + self.camera_tokens
+        return self.vision_tokens + self.modality_tokens
 
     @property
     def token_dim(self) -> int:
@@ -158,24 +160,24 @@ class NavigationPolicy(nn.Module):
         b, f = vision.shape[:2]
         return self.vision_encoder(vision.reshape(b * f, *vision.shape[2:]))
 
-    def encode_ego(self, ego: torch.Tensor | None, batch: int, frames: int) -> torch.Tensor | None:
-        if self.ego_tokens == 0:
-            return None
-        tokens = self.ego_encoder(ego, batch_size=batch, frames=frames)
-        if tokens.shape[:2] != (batch, frames):
-            raise ValueError(f"Ego status must be (B, F, E) = ({batch}, {frames}, E), got {tuple(tokens.shape[:2])}")
+    def encode_modalities(self, inputs: Mapping, batch: int, frames: int, image_hw) -> dict[str, torch.Tensor]:
+        """``{batch key: value}`` -> ``{modality: (B, F, G, D)}``, skipping zero-token slots."""
+        unknown = set(inputs) - set(self.modality_input_names)
+        if unknown:
+            raise ValueError(f"Unknown policy inputs {sorted(unknown)}; expected {self.modality_input_names}")
+        tokens = {}
+        for name, encoder in self.modality_encoders.items():
+            if encoder.num_tokens == 0:
+                continue
+            values = tuple(inputs.get(key) for key in encoder.input_names)
+            encoded = encoder(*values, batch_size=batch, frames=frames, image_hw=image_hw)
+            if encoded.shape[:2] != (batch, frames):
+                raise ValueError(f"{name} must cover ({batch}, {frames}) frames, got {tuple(encoded.shape[:2])}")
+            tokens[name] = encoded
         return tokens
 
-    def encode_camera(self, intrinsics, extrinsics, batch: int, frames: int, image_hw) -> torch.Tensor | None:
-        if self.camera_tokens == 0:
-            return None
-        tokens = self.camera_encoder(intrinsics, extrinsics, batch_size=batch, frames=frames, image_hw=image_hw)
-        if tokens.shape[:2] != (batch, frames):
-            raise ValueError(f"Calibration must cover ({batch}, {frames}) frames, got {tuple(tokens.shape[:2])}")
-        return tokens
-
-    def _per_frame_tokens(self, vision_tokens, ego_tokens, camera_tokens, dim: int):
-        extra = [t for t in (ego_tokens, camera_tokens) if t is not None]
+    def _per_frame_tokens(self, vision_tokens, modality_tokens: Mapping, dim: int):
+        extra = list(modality_tokens.values())
         return torch.cat([vision_tokens, *extra], dim=dim) if extra else vision_tokens
 
     def _encode_goals(self, goals: list, batch: int, observation=None) -> torch.Tensor | None:
@@ -219,21 +221,12 @@ class NavigationPolicy(nn.Module):
                 prepared.append(value.repeat_interleave(decisions, dim=0) if decisions > 1 else value)
         return prepared
 
-    def forward(
-        self,
-        vision: torch.Tensor,
-        goal=None,
-        ego: torch.Tensor | None = None,
-        intrinsics: torch.Tensor | None = None,
-        extrinsics: torch.Tensor | None = None,
-        noise: torch.Tensor | None = None,
-    ) -> PolicyOutput:
+    def forward(self, vision: torch.Tensor, goal=None, noise: torch.Tensor | None = None, **inputs) -> PolicyOutput:
         b, f = vision.shape[:2]
         vision_out = self.encode_frames(vision)
-        ego_tokens = self.encode_ego(ego, b, f)
-        camera_tokens = self.encode_camera(intrinsics, extrinsics, b, f, vision.shape[-2:])
+        modality_tokens = self.encode_modalities(inputs, b, f, vision.shape[-2:])
         tokens = self._per_frame_tokens(
-            vision_out.tokens.reshape(b, f, self.vision_tokens, self.feat_size), ego_tokens, camera_tokens, dim=2
+            vision_out.tokens.reshape(b, f, self.vision_tokens, self.feat_size), modality_tokens, dim=2
         )
         context = self.temporal_encoder(tokens)
         decisions = context.shape[1]
@@ -241,39 +234,21 @@ class NavigationPolicy(nn.Module):
         goal_tokens = self._encode_goals(self._window_goals(goal, b, f, decisions), b * decisions, observation)
         plan = self.action_decoder(context.reshape(b * decisions, self.num_tokens, self.feat_size), goal_tokens, noise)
         return PolicyOutput(
-            vision=vision_out,
-            plan=plan,
-            goal_tokens=goal_tokens,
-            ego_tokens=ego_tokens,
-            camera_tokens=camera_tokens,
+            vision=vision_out, plan=plan, goal_tokens=goal_tokens, modality_tokens=modality_tokens or None
         )
 
-    def predict(
-        self,
-        frame: torch.Tensor,
-        feature_buffer: torch.Tensor,
-        goal=None,
-        ego: torch.Tensor | None = None,
-        intrinsics: torch.Tensor | None = None,
-        extrinsics: torch.Tensor | None = None,
-        noise: torch.Tensor | None = None,
-    ):
+    def predict(self, frame: torch.Tensor, feature_buffer: torch.Tensor, goal=None, noise=None, **inputs):
         """One decision from the newest frame plus buffered past-frame tokens (export graph).
 
-        The newest frame's side inputs are given without a frame axis: ``ego (B, E)``,
-        ``intrinsics (B, 3, 3)``, ``extrinsics (B, 4, 4)``.
+        The newest frame's modality inputs are given without a frame axis, e.g. ``ego (B, E)``,
+        ``intrinsics (B, 3, 3)``.
         """
         b = frame.shape[0]
         vision = self.vision_encoder(frame, export_heads=self.export_heads)
-        ego_tokens = self.encode_ego(_add_frame_axis(ego), b, 1)
-        camera_tokens = self.encode_camera(
-            _add_frame_axis(intrinsics), _add_frame_axis(extrinsics), b, 1, frame.shape[-2:]
-        )
+        newest = {name: _add_frame_axis(value) for name, value in inputs.items()}
+        modality_tokens = self.encode_modalities(newest, b, 1, frame.shape[-2:])
         tokens = self._per_frame_tokens(
-            vision.tokens,
-            None if ego_tokens is None else ego_tokens[:, 0],
-            None if camera_tokens is None else camera_tokens[:, 0],
-            dim=1,
+            vision.tokens, {name: value[:, 0] for name, value in modality_tokens.items()}, dim=1
         )
         current = tokens.reshape(b, 1, self.token_dim)
         window = torch.cat([feature_buffer[:, self.feature_idxs], current], dim=1)
@@ -290,11 +265,7 @@ class NavigationPolicy(nn.Module):
         return ["goal"] if len(names) == 1 else names
 
     def export_input_names(self) -> list[str]:
-        names = ["vision", "feature_buffer", *self.goal_input_names()]
-        if self.ego_tokens:
-            names.append("ego")
-        if self.camera_tokens:
-            names += ["intrinsics", "extrinsics"]
+        names = ["vision", "feature_buffer", *self.goal_input_names(), *self.modality_input_names]
         if self.action_decoder.uses_noise:
             names.append("noise")
         return names
@@ -315,17 +286,14 @@ class NavigationPolicy(nn.Module):
             for encoder in self.goal_encoders
             if encoder.num_tokens
         ]
-        if self.ego_tokens:
-            inputs.append(self.ego_encoder.example_input(batch_size, device=device).squeeze(1))
-        if self.camera_tokens:
-            calibration = self.camera_encoder.example_input(batch_size, 1, tuple(image_hw), device)
-            inputs += [value.squeeze(1) for value in calibration]
+        for encoder in self.modality_encoders.values():
+            inputs += [value.squeeze(1) for value in encoder.example_inputs(batch_size, 1, tuple(image_hw), device)]
         if self.action_decoder.uses_noise:
             inputs.append(self.action_decoder.example_noise(batch_size, device))
         return tuple(inputs)
 
     def example_batch(self, batch_size: int, frames: int, image_hw: tuple[int, int], device=None):
-        """Synthetic ``(vision, goal, ego, intrinsics, extrinsics)`` inputs for shape checks."""
+        """Synthetic ``(vision, goal, {modality key: value})`` inputs for shape checks."""
         vision = torch.rand(batch_size, frames, 3, *image_hw, device=device)
         goals = []
         for encoder in self.goal_encoders:
@@ -339,11 +307,11 @@ class NavigationPolicy(nn.Module):
             goal = goals
         else:
             goal = goals[0] if goals else None
-        ego = None if self.ego_tokens == 0 else self.ego_encoder.example_input(batch_size, frames, device)
-        camera = (None, None)
-        if self.camera_tokens:
-            camera = self.camera_encoder.example_input(batch_size, frames, tuple(image_hw), device)
-        return vision, goal, ego, *camera
+        modalities = {}
+        for encoder in self.modality_encoders.values():
+            values = encoder.example_inputs(batch_size, frames, tuple(image_hw), device)
+            modalities.update(dict(zip(encoder.input_names, values)))
+        return vision, goal, modalities
 
     # ---- losses ---------------------------------------------------------------------------
     def get_losses(self, preds: PolicyOutput, targets):

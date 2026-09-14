@@ -1,0 +1,6 @@
+# @package model.modality_encoders
+# Both batteries-included modalities at once; any further slot is just another key here.
+defaults:
+  - ego
+  - camera
+  - _self_

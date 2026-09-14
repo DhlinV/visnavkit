@@ -1,2 +1,0 @@
-_target_: visnavkit.models.ego.none.NoEgoEncoder
-feat_size: ${model.feat_size}

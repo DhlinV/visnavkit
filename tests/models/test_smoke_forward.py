@@ -13,10 +13,10 @@ def _forward(overrides):
     model = instantiate(cfg.model).eval()
     B, S = 2, cfg.common.seq_length
     w, h = (d // cfg.common.downscale_factor for d in cfg.common.crop_wh)
-    inputs = model.example_batch(B, S, (h, w))
+    vision, goal, modalities = model.example_batch(B, S, (h, w))
     with torch.no_grad():
-        y = model(inputs[0], goal=inputs[1], ego=inputs[2], intrinsics=inputs[3], extrinsics=inputs[4])
-    return cfg, model, inputs, y
+        y = model(vision, goal=goal, **modalities)
+    return cfg, model, (vision, goal, modalities), y
 
 
 def _assert_shapes(cfg, model, y, B=2):
@@ -39,34 +39,37 @@ def test_recipe_forward(recipe):
     _assert_shapes(cfg, model, y)
 
 
-def test_side_inputs_are_opt_in():
-    """Ego status, calibration and the speed head are per-recipe, and each adds its own tokens."""
-    cfg, model, inputs, y = _forward([])
-    assert inputs[2] is None and inputs[3] is None and inputs[4] is None
-    assert y.ego_tokens is None and y.camera_tokens is None and model.num_tokens == model.vision_tokens
+def test_modalities_and_speed_head_are_opt_in():
+    """Modalities and the auxiliary speed head are per-recipe; each modality adds its tokens."""
+    cfg, model, (_, _, modalities), y = _forward([])
+    assert modalities == {} and y.modality_tokens is None and model.num_tokens == model.vision_tokens
 
-    cfg, model, (_, _, ego, intrinsics, extrinsics), y = _forward(
+    cfg, model, (_, _, modalities), y = _forward(
         [
-            "model/ego_encoder=state",
-            "model/camera_encoder=pinhole",
+            "model/modality_encoder=ego_camera",
             "model.vision_encoder.speed_head=true",
             "common.ego_features=[speed]",
             "common.use_camera=true",
         ]
     )
     frames = cfg.common.seq_length
-    assert ego.shape == (2, frames, 1)
-    assert intrinsics.shape == (2, frames, 3, 3) and extrinsics.shape == (2, frames, 4, 4)
-    assert y.ego_tokens.shape == y.camera_tokens.shape == (2, frames, 1, model.feat_size)
+    assert model.modality_input_names == ["ego", "intrinsics", "extrinsics"]
+    assert modalities["ego"].shape == (2, frames, 1)
+    assert modalities["intrinsics"].shape == (2, frames, 3, 3)
+    assert modalities["extrinsics"].shape == (2, frames, 4, 4)
+    assert {name: tuple(t.shape) for name, t in y.modality_tokens.items()} == {
+        "ego": (2, frames, 1, model.feat_size),
+        "camera": (2, frames, 1, model.feat_size),
+    }
     assert model.num_tokens == model.vision_tokens + 2
     _assert_shapes(cfg, model, y)
 
 
 @pytest.mark.parametrize("recipe", ["gnm", "nomad"])
 def test_recipe_training_loss(recipe):
-    cfg, model, inputs, _ = _forward([f"model={recipe}", "model.vision_encoder.speed_head=true"])
+    cfg, model, (vision, goal, modalities), _ = _forward([f"model={recipe}", "model.vision_encoder.speed_head=true"])
     model.train()
-    y = model(inputs[0], goal=inputs[1], ego=inputs[2])
+    y = model(vision, goal=goal, **modalities)
     n = y.vision.speed.shape[0]
     targets = dict(
         vision=dict(frame_speeds=torch.rand(n, 1)), action=dict(future_poses=torch.rand(n, cfg.plan_len_points, 3))

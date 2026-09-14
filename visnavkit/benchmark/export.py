@@ -57,8 +57,8 @@ class SequencePolicy(nn.Module):
     """One decision per independent history window; no hidden feature cache.
 
     Goal-conditioned recipes run with their learned null goal token (goal-free inference, as in
-    NoMaD exploration) and, when the recipe consumes ego status or calibration, their null tokens;
-    the metadata labels them. ``speed`` is emitted only by recipes with the auxiliary speed head.
+    NoMaD exploration) and every modality encoder's null token; the metadata labels them.
+    ``speed`` is emitted only by recipes with the auxiliary speed head.
     """
 
     def __init__(self, model):
@@ -73,10 +73,7 @@ class SequencePolicy(nn.Module):
     @property
     def conditioning(self) -> str:
         parts = ["goal_free" if self.model.goal_tokens == 0 else "null_goal_token"]
-        if self.model.ego_tokens:
-            parts.append("null_ego_token")
-        if self.model.camera_tokens:
-            parts.append("null_camera_token")
+        parts += [f"null_{name}_token" for name, e in self.model.modality_encoders.items() if e.num_tokens]
         return "+".join(parts)
 
     def forward(self, vision, initial_noise=None):
@@ -84,8 +81,7 @@ class SequencePolicy(nn.Module):
         encoded = self.model.encode_frames(vision)
         tokens = self.model._per_frame_tokens(
             encoded.tokens.reshape(batch, history, self.model.vision_tokens, self.model.feat_size),
-            self.model.encode_ego(None, batch, history),
-            self.model.encode_camera(None, None, batch, history, vision.shape[-2:]),
+            self.model.encode_modalities({}, batch, history, vision.shape[-2:]),
             dim=2,
         )
         context = self.model.temporal_encoder(tokens)[:, -1]
