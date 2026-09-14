@@ -162,6 +162,28 @@ Layout: [`models/vision`](visnavkit/models/vision/) · [`models/temporal`](visna
 Use it from another project with `uv add --editable /path/to/visnavkit`; the configs
 ship inside the package as `visnavkit.configs`.
 
+## Credits
+
+VisNavKit is built on the following amazing open-source projects:
+
+- [PyTorch Lightning](https://github.com/Lightning-AI/pytorch-lightning) Training loop, checkpointing and callbacks.
+- [Hydra](https://github.com/facebookresearch/hydra) + [OmegaConf](https://github.com/omry/omegaconf) Composable configuration for every stage.
+- [timm](https://github.com/huggingface/pytorch-image-models) Every vision backbone, pretrained and feature-ready.
+- [TorchCodec](https://github.com/pytorch/torchcodec) and [NVIDIA DALI](https://github.com/NVIDIA/DALI) CPU and GPU video decoding.
+- [ONNX Runtime](https://github.com/microsoft/onnxruntime) and [OnnxSlim](https://github.com/inisis/OnnxSlim) Deployment graphs, parity checks and benchmarks.
+- [uv](https://github.com/astral-sh/uv) + [Ruff](https://github.com/astral-sh/ruff) Environments, linting and formatting.
+
+The following repositories greatly inspire VisNavKit:
+
+- [diffusers](https://github.com/huggingface/diffusers) — typed outputs, denoiser and scheduler as separate objects, the EMA schedule.
+- [openpi](https://github.com/Physical-Intelligence/openpi) — flow-matching conventions and its Beta time sampling.
+- [LeRobot](https://github.com/huggingface/lerobot) — one training forward, one deployment predict.
+- [diffusion_policy](https://github.com/real-stanford/diffusion_policy) — the conditional 1D U-Net denoiser.
+- [visualnav-transformer](https://github.com/robodhruv/visualnav-transformer) — the GNM / ViNT / NoMaD recipes.
+- [openpilot](https://github.com/commaai/openpilot) — quadratically spaced trajectory anchors.
+
+Thanks to the maintainers of these projects for their contribution to the community!
+
 <details>
 <summary>Research references</summary>
 
