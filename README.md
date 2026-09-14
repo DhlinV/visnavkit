@@ -38,7 +38,7 @@ the paper's reported numbers, which needs the corpus and a training run.
 | Corpus tooling: preprocess, cache, stats, anchors, visualize | `██████████` 5/5 |
 | Export, ONNX parity, open-loop benchmark | `██████████` 3/3 |
 | Multi-dataset training: per-corpus statistics, then a loader that mixes them | `█████░░░░░` 1/2 |
-| Dataset converters: FrodoBots-2K, RECON, SCAND, GoStanford2, SACSoN | `░░░░░░░░░░` 0/5 |
+| Dataset converters: FrodoBots-2K, EgoWalk, NVIDIA PhysicalAI AV, OpenScene, RECON, SCAND, GoStanford2, SACSoN | `░░░░░░░░░░` 0/8 |
 | Reproducing GNM / ViNT / NoMaD | `░░░░░░░░░░` 0/3 |
 | Reproducing CityWalker / MBRA / NavDP | `░░░░░░░░░░` 0/3 |
 | Reproducing S2E / SocialNav / InternVLA-N1 | `░░░░░░░░░░` 0/3 |
@@ -147,7 +147,8 @@ uv run visnavkit-dataset command=anchors   dataset=torch num_anchors=16
 ```
 
 Sidecar layout, the opt-in ego and calibration inputs, and the public corpora this format
-targets (FrodoBots-2K, RECON, SCAND, GoStanford2, SACSoN/HuRoN) with their licences:
+targets (FrodoBots-2K, EgoWalk, NVIDIA PhysicalAI AV, OpenScene, RECON, SCAND, GoStanford2,
+SACSoN/HuRoN) with their licences:
 [data guide](docs/data.md).
 
 VisNavKit ships no trained policies — the recipes are architectures. What loads, and where each

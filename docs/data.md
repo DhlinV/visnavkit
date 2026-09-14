@@ -38,21 +38,25 @@ Opt-in modality inputs:
 
 ### Public corpora
 
-Recorded sidewalk and off-road navigation datasets this format targets. Each needs a one-off
-conversion into the clip layout above; `visnavkit-dataset command=preprocess` validates the
+Recorded sidewalk, off-road and on-road navigation datasets this format targets. Each needs a
+one-off conversion into the clip layout above; `visnavkit-dataset command=preprocess` validates the
 result. Converters are not bundled — the sources differ too much to guess at.
 
 | Corpus | Content | Licence | Source |
 | --- | --- | --- | --- |
 | FrodoBots-2K | ~2000 h teleoperated sidewalk driving in 10+ cities; RGB, GPS, IMU, audio, control | CC BY-SA 4.0 | [BitRobot/FrodoBots-2K](https://huggingface.co/datasets/BitRobot/FrodoBots-2K) |
+| EgoWalk | 50+ h egocentric human walking, indoor and outdoor; RGB, depth, ZED odometry poses, language goals | MIT | [EgoWalk/trajectories](https://huggingface.co/datasets/EgoWalk/trajectories) |
+| NVIDIA PhysicalAI AV | ~1700 h driving in 25 countries; 306k 20 s clips, 7 cameras, LiDAR, radar | NVIDIA AV Dataset Agreement | [nvidia/PhysicalAI-Autonomous-Vehicles](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles) |
+| OpenScene | 120+ h of nuPlan driving redistributed at 2 Hz; 8 cameras, occupancy labels | CC BY-NC-SA 4.0 + nuPlan agreement | [OpenDriveLab/OpenScene](https://github.com/OpenDriveLab/OpenScene) |
 | RECON | Off-road exploration with goal images | see source | [project](https://sites.google.com/view/recon-robot/dataset) |
 | SCAND | Socially compliant human-teleoperated navigation | see source | [project](https://www.cs.utexas.edu/~xiao/SCAND/SCAND.html#Links) |
 | GoStanford2 | Indoor trajectories, the ViNT-modified release | see source | [download](https://drive.google.com/drive/folders/1RYseCpbtHEFOsmSX2uqNY_kvSxwZLVP_?usp=sharing) |
 | SACSoN / HuRoN | Indoor navigation among people | see source | [project](https://sites.google.com/view/sacson-review/huron-dataset) |
 
 The last four are ViNT's public training set, listed in
-[visualnav-transformer](https://github.com/robodhruv/visualnav-transformer). Only FrodoBots-2K
-states a licence machine-readably; for the rest, read the terms on the source page before using
-them — each corpus keeps its own, and VisNavKit's MIT licence covers this code only, never the
+[visualnav-transformer](https://github.com/robodhruv/visualnav-transformer). FrodoBots-2K,
+EgoWalk and OpenScene state a licence machine-readably; NVIDIA's is a click-through agreement on
+the dataset card, and for the ViNT four read the terms on the source page before using them —
+each corpus keeps its own, and VisNavKit's MIT licence covers this code only, never the
 data or any third-party weights. Tiny bundled corpora live in [`assets/datasets/`](../assets/) and
 are exercised by `tests/data/test_assets.py`.
