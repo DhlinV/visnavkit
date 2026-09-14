@@ -269,10 +269,9 @@ If VisNavKit helps your work, please consider citing it:
 Please also cite the work a recipe adapts — [`CITATION.bib`](CITATION.bib) carries an entry for
 every paper below, exported from arXiv rather than transcribed.
 
-<details>
-<summary>Research references</summary>
+## Research references
 
-Navigation policies, oldest first; the last four are the recipes this repo adapts most closely.
+Navigation policies, oldest first. Every one but ViKiNG has a recipe in the table above.
 
 - **ViKiNG**: Vision-Based Kilometer-Scale Navigation with Geographic Hints (RSS 2022) — [arXiv:2202.11271](https://arxiv.org/abs/2202.11271)
 - **GNM**: A General Navigation Model to Drive Any Robot (ICRA 2023) — [arXiv:2210.03370](https://arxiv.org/abs/2210.03370), [code](https://github.com/robodhruv/drive-any-robot)
@@ -292,5 +291,3 @@ World models, generative building blocks, simulators and benchmarks:
 - **NWM**: Navigation World Models (CVPR 2025) — [arXiv:2412.03572](https://arxiv.org/abs/2412.03572), [code](https://github.com/facebookresearch/nwm)
 - **Diffusion Policy** (RSS 2023) — [arXiv:2303.04137](https://arxiv.org/abs/2303.04137), [code](https://github.com/real-stanford/diffusion_policy); **DiT** (ICCV 2023) — [arXiv:2212.09748](https://arxiv.org/abs/2212.09748), [code](https://github.com/facebookresearch/DiT); **Flow matching** (ICLR 2023) — [arXiv:2210.02747](https://arxiv.org/abs/2210.02747)
 - **MetaUrban** (ICLR 2025) — [arXiv:2407.08725](https://arxiv.org/abs/2407.08725), [code](https://github.com/metadriverse/metaurban); **SidewalkBench** — [arXiv:2606.16953](https://arxiv.org/abs/2606.16953)
-
-</details>
