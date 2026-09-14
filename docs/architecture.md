@@ -1,150 +1,126 @@
-# Model architecture
+# Architecture
 
-VisNavKit composes a per-frame spatial encoder, a temporal encoder, and an action
-decoder. Hydra builds these components; `E2EModel` connects them and `LitModel`
-handles optimization and metrics. The organization follows
-[Diffusers' model families](https://github.com/huggingface/diffusers/tree/main/src/diffusers/models)
-and [composition of reusable components](https://huggingface.co/docs/diffusers/main/en/using-diffusers/write_own_pipeline),
-with explicit configuration choices as in
-[LeRobot's policy construction](https://github.com/huggingface/lerobot/blob/main/src/lerobot/policies/factory.py).
-Hydra remains the factory, so no second registration framework is needed.
+A policy is four stages connected by tokens of width `feat_size`. Hydra instantiates
+each stage from its own config group; `NavigationPolicy` connects them and `LitModel`
+handles optimization and metrics. The decomposition follows
+[diffusers](https://github.com/huggingface/diffusers) (typed outputs, denoiser and
+scheduler as separate objects) and [LeRobot](https://github.com/huggingface/lerobot)
+(one training forward, one deployment predict).
 
 ```text
 visnavkit/models/
-├── spatial_encoders/
-│   └── vision_encoders/
-│       ├── base.py               # RGB-pair preparation, projections, pose/loss contract
-│       ├── timm.py               # General feature-pyramid backbone adapter
-│       ├── vit_dino.py           # Shared DINO frame-pair encoding
-│       ├── vit_dinov2.py
-│       ├── vit_dinov3.py
-│       ├── vit_fastvit.py
-│       ├── cnn_resnet.py
-│       ├── cnn_efficientnet.py
-│       └── cnn_mobilenet.py
-├── temporal_encoders/
-│   ├── base.py                   # Shared transformer and time reductions
-│   ├── causal.py
-│   ├── bidirectional.py
-│   └── identity.py
-├── action_decoders/
-│   ├── base.py                   # ActionDecoder: temporal encoder + trajectory head
-│   ├── mhp.py                    # PlanHead: multi-hypothesis Laplace regression
-│   ├── waypoint.py               # WaypointHead: deterministic regression
-│   ├── diffusion.py              # DiffusionPlanHead: DDPM training / DDIM sampling
-│   └── outputs.py                # Shared trajectory output parsing
-├── heads/pose_head.py            # Auxiliary spatial supervision
-├── layers/                      # Reusable neural-network layers
-├── losses/                      # Loss primitives
-├── compatibility.py             # Known checkpoint/config import migrations
-├── e2e_model.py
-└── lit_model.py
+├── policy.py            NavigationPolicy: forward (training) / predict (deployment)
+├── outputs.py           VisionOutput, PlanOutput, PolicyOutput dataclasses
+├── lit_model.py         Lightning module: targets, losses, metrics, optimizer
+├── vision/              frames -> tokens
+│   ├── base.py          pair preparation, token modes, projection, speed head
+│   ├── timm_cnn.py      any features_only timm backbone (ResNet, EfficientNet, ConvNeXt, FastViT, ...)
+│   └── timm_vit.py      any timm ViT (DINOv2/v3, DeiT, EVA-02, SigLIP, CLIP, ...)
+├── temporal/            tokens across frames -> context
+│   ├── base.py          transformer over (frames x tokens), reductions
+│   ├── causal.py / bidirectional.py / identity.py
+├── goal/                goal specification -> goal tokens
+│   ├── base.py          null token, goal dropout
+│   ├── none.py / point.py / image.py / route.py / instruction.py
+└── action/              context (+ goal) tokens -> trajectories
+    ├── base.py          conditioning, packing to the flat layout, losses
+    ├── spaces.py        ActionSpace: waypoint | velocity
+    ├── normalizer.py    ActionNormalizer buffers (none | meanstd | minmax)
+    ├── anchors.py       AnchorSet: arc fan or NPZ vocabulary
+    ├── regression.py / mhp.py / anchor.py
+    ├── generative.py    GenerativeDecoder = denoiser x scheduler (x anchors)
+    ├── denoisers/       mlp.py, dit.py, unet.py
+    └── schedulers/      ddim.py, flow.py
 ```
 
-The tree omits package initializers and compatibility modules. FastViT is a
-hybrid backbone; it uses the feature-pyramid adapter while keeping its own
-`vit_fastvit` family entry. `spatial_encoders` leaves a place for additional
-spatial modalities without mixing them into vision implementations.
+## Tensor contracts
 
-## Choose components
+| Stage | Input | Output |
+| --- | --- | --- |
+| Vision encoder | `(N, 6, H, W)` previous/current RGB pair in [0, 1] | `VisionOutput(tokens (N, K, D), pose (N, 1), prev_img_mask (N,))` |
+| Temporal encoder | `(B, F, K, D)` | `(B, F', K, D)`, `F' = F` for `reduction=none`, else 1 |
+| Goal encoder | goal batch (see below) or `None` | `(N, G, D)`; `G = 0` for `none` |
+| Action decoder | context `(N, K, D)`, goal `(N, G, D)`, optional noise | `PlanOutput(plans (N, M * (2 * T * P + 1)), ...)` |
 
-| Hydra group | Choices |
-| --- | --- |
-| `vision_encoder` | `vit_fastvit`, `vit_dinov2`, `vit_dinov3`, `cnn_resnet`, `cnn_efficientnet`, `cnn_mobilenet`, `timm` |
-| `temporal_encoder` | `causal`, `causal_4layer`, `bidirectional`, `identity` |
-| `action_decoder` | `mhp`, `waypoint`, `diffusion` |
+- **Tokens per frame** `K`: `token_mode=global` (1), `patch` (`gh * gw` pooled patches),
+  `fused` (1 + grid). Patch tokens carry a learned position embedding; the temporal
+  encoder shares its frame position across the `K` tokens and expands the causal mask.
+- **Pair fusion**: `pair_mode=early` feeds the 6-channel stack to the backbone;
+  `late` runs a shared 3-channel backbone on both frames and concatenates embeddings
+  (default for pretrained ViTs).
+- **Goal batches**: point goals are per frame, `(B, F, 3)` as (distance, cos, sin) in
+  each frame's ego frame; image `(B, 3, h, w)`, route image `(B, C, h, w)` and
+  instruction `(B, E)` goals describe the whole window. `p_drop` replaces a sample's goal
+  tokens with the learned null token during training; passing `goal=None` at inference
+  uses the same null token (goal-free exploration, NoMaD style).
+- **Conditioning**: the decoder concatenates context and goal tokens with a type
+  embedding and pools them with one learned attention query (or the mean). One context
+  token with no goal is passed through unchanged, so goal-free single-token recipes cost
+  nothing extra. DiT denoisers also cross-attend to the raw tokens.
+- **Flat layout**: every decoder packs `[mu, log_scale, confidence_logit]` per mode in
+  pose space; `parse_plan_output` yields trajectories, scales, confidences and the best
+  plan. Regression and generative decoders emit uniform confidences; anchor decoders
+  emit classifier logits.
 
-Each group has shared defaults in `base.yaml`. They populate the existing
-`model.modules.vision_encoder` and `model.modules.action_decoder` structure.
-The action decoder group selects the trajectory head; the temporal group
-populates `model.modules.action_decoder.temporal_encoder`. Configs stay under
-`visnavkit/configs/` and ship in the wheel.
+## Action spaces and normalization
 
-```bash
-# Existing recipe with independently selected temporal and action components.
-uv run python -m visnavkit.scripts.smoke_forward model=vint \
-  temporal_encoder=identity action_decoder=mhp \
-  'common.crop_wh=[64,64]' common.downscale_factor=1 common.seq_length=3
+`ActionSpace(kind, pose_size, plan grid)` converts dataset poses `(N, T, P)` to the
+predicted quantity and back. `waypoint` is the identity. `velocity` derives unicycle
+(speed, yaw rate) per anchor segment and integrates them back with the same grid, so
+losses act on commands while metrics and export always see poses. `ActionNormalizer`
+holds affine statistics as buffers (fit from targets or loaded from NPZ) so they travel
+with the checkpoint and the ONNX graph. Generative decoders expect roughly unit-scale
+targets; use `meanstd` or `minmax` once a corpus exists.
 
-# DINOv3 + full-window attention + diffusion, without pretrained downloads.
-uv run python -m visnavkit.scripts.smoke_forward vision_encoder=vit_dinov3 \
-  temporal_encoder=bidirectional action_decoder=diffusion \
-  'common.crop_wh=[64,64]' common.downscale_factor=1 common.seq_length=3
-```
+## Generative decoders
 
-Change a backbone variant through
-`model.modules.vision_encoder.backbone_name=...`. Use its matching family, or
-`vision_encoder=timm` for another timm feature-pyramid backbone, setting
-`out_indices` and `act_layer` as required. Transformer depth, hidden sizes, and
-other component settings remain ordinary Hydra overrides. Research recipe names
-retain their original architecture adaptations; see the [model catalog](models.md).
+`GenerativeDecoder(denoiser, scheduler, anchors=None)`:
 
-## Tensor and training contracts
+- **Schedulers** work on continuous time `t in [0, 1]` (1 = noise). `DDIMScheduler`
+  trains with DDPM noise prediction and samples with deterministic DDIM. Its `clip_sample`
+  clamp bounds the `1 / sqrt(alpha_bar)` term near `t = 1` and is expressed in *normalized*
+  action units (diffusers clips at 1.0 for `[-1, 1]` data); with `normalizer.mode=none`
+  those units are metres, so the clamp has to exceed the longest plan — `GenerativeDecoder`
+  warns about that combination. `FlowMatchingScheduler` uses linear interpolation, a
+  velocity target and Euler steps; `time_sampling` is `uniform`, `logit_normal` (SD3) or
+  `beta` (openpi pi0's `Beta(1.5, 1)`, weighted toward the noisy end), and `shift` applies
+  the diffusers `FlowMatchEulerDiscreteScheduler` time shift so more of the step budget
+  lands at high noise.
+- **Denoisers** share `forward(x_t, t, cond, tokens)`: `MLPDenoiser` (flat),
+  `DiTDenoiser` (adaLN-Zero self-attention over anchor steps, cross-attention to context
+  and goal tokens), `UNet1DDenoiser` (diffusion-policy FiLM U-Net).
+- **Anchors** turn the problem into per-anchor residual generation: one denoised
+  trajectory per anchor, confidences from an anchor classifier (`num_modes = K`).
+- Training skips sampling (`plans` stay zero; the loss uses `cond`/`tokens`). Inference
+  takes explicit `noise (N, M, T, A)`, so the same noise gives the same plan in PyTorch
+  and ONNX.
 
-Print the selected model's pipeline and run its checks with:
+## Weight averaging
 
-```bash
-uv run visnavkit-sanity-check --onnx vision_encoder=vit_dinov2 \
-  temporal_encoder=bidirectional action_decoder=diffusion
-```
+`ema=default` adds `EMACallback` (`utils/ema.py`), the diffusers `EMAModel` /
+diffusion-policy schedule `1 - (1 + step / inv_gamma) ** -power` capped at `decay`. It
+averages every floating-point tensor of the module, swaps the average in for validation,
+and writes it into the checkpoint's `state_dict`, so monitored metrics, export and the
+benchmark all see the averaged policy. The online weights ride along under
+`ema_online_state_dict`, so a resumed run continues from the weights the restored
+optimizer state belongs to. Denoising decoders benefit most; it is off by default.
 
-The script draws the configured classes and tensor shapes as ASCII, checks
-training forward/backward and feature-buffer equivalence, and optionally checks
-ONNX Runtime outputs. Use ordinary Hydra overrides to select components or
-change the small default input window. It never downloads pretrained weights.
+## Deployment versus benchmark export
 
-- Vision inputs are floating-point previous/current RGB pairs: `[B, 6, H, W]`.
-  Outputs include `feat_out: [B, D]`, `pose: [B, 1]`, and `prev_img_mask: [B]`.
-  Pyramid backbones encode stacked pairs; DINO shares a three-channel backbone
-  between the two frames and concatenates their pooled embeddings. DINO inputs
-  are padded to patch boundaries and frozen backbones stay in evaluation mode.
-- Temporal inputs are `[B, S, D]`. `reduction=none` returns all tokens; `last`,
-  `avg`, and `sum` return `[B, D]`. Causal attention sees only preceding/current
-  frames; bidirectional attention sees the whole supplied window; identity
-  applies only the requested reduction.
-- All trajectory heads return `plans` with flat per-mode layout
-  `[mu, log_scale, confidence_logit]`, totaling `M * (2 * T * P + 1)` values.
-  `parse_plan_output` provides trajectories, confidences, scales, and the best
-  trajectory. Waypoint and diffusion retain this layout for common metrics and
-  export. Diffusion uses noise prediction during training and sampling in eval.
-- `E2EModel` accepts frame sequences `[B, S, 6, H, W]` and returns `vision` and
-  `action` dictionaries. Causal/identity training defaults to one action per
-  frame. Reduced outputs train against the final frame's future trajectory;
-  auxiliary pose supervision still covers every frame.
+`NavigationPolicy.predict(frame, feature_buffer, goal=None, noise=None)` encodes one
+frame and reuses buffered past tokens `(B, history, K * D)`; `scripts/export.py`
+traces it with presence-driven inputs and verifies ONNX Runtime parity (enforced for
+checkpoints, reported for untrained pipeline checks). `benchmark/export.py` traces the
+full observation window with fixed shapes and outputs `trajectories`, `scores`, `speed`
+for latency and open-loop measurements. Both flip `reduction=none` to `last`, precompute
+ViT position embeddings for the export resolution, and disable the MHA fast path.
 
-Bidirectional defaults to `reduction=last`. Using `none` with per-frame online
-action supervision exposes earlier decisions to later observations. Reserve
-that combination for intentional offline sequence tasks. `avg` and `sum` also
-use the final decision target when training through `LitModel`.
+## Add a component
 
-## Export and compatibility
-
-Deployment accepts one current RGB pair plus a feature buffer. Full-window
-benchmark export encodes the complete observed sequence. Both consume the same
-component outputs; diffusion benchmark export takes explicit initial noise for
-numerical parity. `none` becomes `last` for deployment.
-
-DINOv2 export precomputes its position embeddings for the requested resolution
-using the same antialiased interpolation as eager inference. The exporters use
-the prepared encoder copy, preserving the original model and checkpoint shapes.
-This avoids an unsupported runtime interpolation operation in ONNX.
-
-Old encoder, temporal encoder, action decoder, and action-head import paths are
-small reexports for saved Hydra configs. Module attribute names and state-dict
-keys are preserved, including unwrapped single-layer temporal transformers.
-Benchmark checkpoint matching recognizes known equivalent old/new targets but
-still rejects architecture changes. New configs and imports use canonical paths.
-
-## Add a family
-
-1. Add an implementation to its component package and export its public class.
-   Reuse `BaseVisionEncoder` for shared vision processing, `TimmVisionEncoder`
-   for feature pyramids, or `BaseTemporalEncoder` for transformer variants.
-2. Add a Hydra group config with the existing tensor contract and explicit
-   `_target_`. Add a model recipe only when it represents a useful combination.
-3. Verify forward, loss/backward, and export behavior. Preserve state-dict keys
-   for existing families and test any intentional migration.
-
-`tests/models/` covers component behavior, checkpoint compatibility, attention
-direction, training targets, and feature-buffer parity. Benchmark tests exercise
-ONNX export and numerical parity.
+1. Subclass the stage's base (`BaseVisionEncoder._encode`, `BaseTemporalEncoder`,
+   `BaseGoalEncoder.encode`, `BaseActionDecoder.decode/loss`, or a denoiser with the
+   shared signature) in the matching package.
+2. Add a yaml to the matching `configs/model/<group>/` directory with an explicit
+   `_target_`; interpolate `feat_size` from `${model.feat_size}`.
+3. Run `uv run visnavkit-sanity-check model/<group>=<name> --onnx`, then add the entry to
+   the group test in `tests/models/test_model_configs.py`.

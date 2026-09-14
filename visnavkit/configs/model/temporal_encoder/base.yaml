@@ -1,0 +1,8 @@
+embed_dim: ${model.feat_size}
+num_heads: 8
+num_layers: 1
+ff_dim: 2048
+seq_len: ${model.export_cfg.seq_len}
+dropout: 0.1
+reduction: none  # none: one decision per frame (online, causal only) | last | avg | sum
+mask_p: 0.1

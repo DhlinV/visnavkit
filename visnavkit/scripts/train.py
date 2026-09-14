@@ -43,6 +43,8 @@ def create_trainer(cfg):
             auto_insert_metric_name=False,
         )
     ]
+    if cfg.get("ema"):
+        callbacks.append(instantiate(cfg.ema))
     if experiment_logger:
         callbacks.append(LearningRateMonitor(logging_interval="step"))
     return L.Trainer(**cfg.trainer.kwargs, logger=experiment_logger, callbacks=callbacks)

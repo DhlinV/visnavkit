@@ -8,8 +8,17 @@ from torch.utils.data import Dataset
 from torchcodec.decoders import VideoDecoder
 
 from visnavkit.data.file_list import parse_file_list_frame_ranges, resolve_path
-from visnavkit.data.pose_targets import get_current_frame_idxs, get_future_poses_from_dir, target_safe_frame_ranges
-from visnavkit.utils.common import build_idxs, load_npy
+from visnavkit.data.pose_targets import (
+    get_current_frame_idxs,
+    get_future_poses,
+    goal_point_targets,
+    load_pose_arrays,
+    sample_goal_frame,
+    target_safe_frame_ranges,
+)
+from visnavkit.utils.common import build_idxs
+
+GOAL_TYPES = ("none", "point", "image", "route_image", "instruction")
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +30,11 @@ class Mp4WindowDataset(Dataset):
     torchcodec, and emits the same batch keys (``frames`` uint8 (S, 6, h, w), ``frame_times_s``,
     ``future_poses``, ``frame_speeds``, ``target_times_s``). Target times are relative
     seconds, shape (T,) per sample and (B,T) after collation; all S frames share them.
+
+    ``goal_type`` adds a ``goal`` key: ``point`` (S, 3) distance/cos/sin of a future frame sampled
+    ``goal_horizon_s`` seconds ahead, ``image`` (3, h, w) uint8 crop of that frame, ``route_image``
+    (3, h, w) from the episode's ``route_images.npy`` (N, h, w, 3) sidecar indexed by the current
+    frame, or ``instruction`` (E,) from ``instruction_embedding.npy``.
     """
 
     def __init__(
@@ -38,6 +52,8 @@ class Mp4WindowDataset(Dataset):
         crop_xy=(0, 0),
         crop_wh=(1920, 1080),
         downscale_factor=4,
+        goal_type="none",
+        goal_horizon_s=(3.0, 15.0),
         # ---- augmentations (hflip + color jitter only; warp/jitter are DALI-only) ----
         use_augs=False,
         p_hflip=0.5,
@@ -53,6 +69,10 @@ class Mp4WindowDataset(Dataset):
         self.frame_step = frame_step
         self.seq_step = seq_step
         self.use_full_pose = use_full_pose
+        if goal_type not in GOAL_TYPES:
+            raise ValueError(f"goal_type must be one of {GOAL_TYPES}, got {goal_type!r}")
+        self.goal_type = goal_type
+        self.goal_horizon_s = tuple(float(v) for v in goal_horizon_s)
         self.p_hflip = p_hflip if use_augs else 0.0
         for name, value in {
             "seq_len": seq_len,
@@ -96,33 +116,69 @@ class Mp4WindowDataset(Dataset):
     def __getitem__(self, idx):
         video_fp, start_idx = self.windows[idx]
         sample_dir = Path(video_fp).parent
+        positions, orientations, speeds, times_s = load_pose_arrays(sample_dir)
+        seq_idxs = get_current_frame_idxs(start_idx, self.frame_step, self.seq_step, self.seq_len)
+        goal_idx = None
+        if self.goal_type in ("point", "image"):
+            goal_idx = sample_goal_frame(times_s, seq_idxs[-1], self.goal_horizon_s, f"{video_fp}:{start_idx}")
 
         pair_starts = [start_idx + k * self.seq_step * self.frame_step for k in range(self.seq_len)]
         frame_idxs = [i for p in pair_starts for i in (p, p + self.frame_step)]
         decoder = VideoDecoder(video_fp, device="cpu", dimension_order="NCHW")
-        frames = decoder.get_frames_at(indices=frame_idxs).data  # uint8 (2S, 3, H, W)
-        frames = frames[..., self.crop_slice_h, self.crop_slice_w]
+        decode_idxs = frame_idxs + ([goal_idx] if self.goal_type == "image" else [])
+        decoded = decoder.get_frames_at(indices=decode_idxs).data  # uint8 (2S[+1], 3, H, W)
+        decoded = decoded[..., self.crop_slice_h, self.crop_slice_w]
         if self.color_jitter is not None:
-            frames = self.color_jitter(frames)
-        frames = torch.cat([frames[0::2], frames[1::2]], dim=1)  # (S, 6, h, w) prev+cur
+            decoded = self.color_jitter(decoded)
+        frames = torch.cat(
+            [decoded[0 : 2 * self.seq_len : 2], decoded[1 : 2 * self.seq_len : 2]], dim=1
+        )  # (S, 6, h, w)
 
-        seq_idxs = get_current_frame_idxs(start_idx, self.frame_step, self.seq_step, self.seq_len)
-        future_poses, _ = get_future_poses_from_dir(
-            sample_dir, seq_idxs, self.t_anchors, self.num_pts, self.use_full_pose, strict=True, interp_to_end=False
+        future_poses, _ = get_future_poses(
+            positions,
+            orientations,
+            speeds,
+            times_s,
+            seq_idxs,
+            self.t_anchors,
+            self.num_pts,
+            self.use_full_pose,
+            strict=True,
+            interp_to_end=False,
         )
-        frame_times_s = load_npy(sample_dir / "frame_times.npy") / 1e9
-        frame_speeds = load_npy(sample_dir / "frame_speeds.npy")
+        goal = self._goal(sample_dir, positions, orientations, seq_idxs, goal_idx, decoded)
 
         if torch.rand(1) < self.p_hflip:
             frames = torch.flip(frames, dims=[-1])
             future_poses[..., 1] *= -1.0
+            if self.goal_type == "point":
+                goal[:, 2] *= -1.0
+            elif self.goal_type in ("image", "route_image"):
+                goal = torch.flip(goal, dims=[-1])
 
-        return dict(
+        sample = dict(
             frames=frames,
-            frame_times_s=torch.tensor(np.asarray(frame_times_s[seq_idxs]), dtype=torch.float64),
+            frame_times_s=torch.tensor(np.asarray(times_s[seq_idxs]), dtype=torch.float64),
             future_poses=torch.from_numpy(future_poses),
             target_times_s=torch.tensor(self.t_anchors, dtype=torch.float32),
-            frame_speeds=torch.tensor(np.asarray(frame_speeds[seq_idxs]), dtype=torch.float32).reshape(-1, 1),
+            frame_speeds=torch.tensor(np.asarray(speeds[seq_idxs]), dtype=torch.float32).reshape(-1, 1),
+        )
+        if goal is not None:
+            sample["goal"] = goal
+        return sample
+
+    def _goal(self, sample_dir, positions, orientations, seq_idxs, goal_idx, decoded):
+        if self.goal_type == "none":
+            return None
+        if self.goal_type == "point":
+            return torch.from_numpy(goal_point_targets(positions, orientations, seq_idxs, goal_idx))
+        if self.goal_type == "image":
+            return decoded[-1]
+        if self.goal_type == "route_image":
+            routes = np.load(sample_dir / "route_images.npy", mmap_mode="r")
+            return torch.from_numpy(np.ascontiguousarray(routes[seq_idxs[-1]])).permute(2, 0, 1)
+        return torch.from_numpy(
+            np.asarray(np.load(sample_dir / "instruction_embedding.npy"), dtype=np.float32).reshape(-1)
         )
 
     def __len__(self):

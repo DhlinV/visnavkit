@@ -1,0 +1,6 @@
+_target_: visnavkit.models.action.denoisers.unet.UNet1DDenoiser
+_partial_: true
+down_dims: [64, 128, 256]
+kernel_size: 5
+n_groups: 8
+time_dim: 64

@@ -27,7 +27,7 @@ grep -rniE "todo\([a-z]+\)|@(gmail|comma)|/home/|driving-model-track" \
 ```bash
 uv run ruff check .
 uv run pytest tests/ -q
-uv run python -m visnavkit.scripts.smoke_forward model.modules.vision_encoder.pretrained=false
-uv run python -m visnavkit.scripts.export checkpoint=null output=/tmp/audit.onnx model.modules.vision_encoder.pretrained=false
+uv run visnavkit-sanity-check --onnx
+uv run visnavkit-export checkpoint=null output=/tmp/audit.onnx
 ```
 All four must pass. Report findings as a list with file:line references; fix only after approval.

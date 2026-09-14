@@ -1,0 +1,5 @@
+defaults:
+  - cnn
+  - _self_
+backbone_name: mobilenetv3_large_100
+out_indices: [2, 3, 4]

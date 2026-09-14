@@ -1,6 +1,7 @@
 """Timestamp-aligned ego-frame targets for the legacy MP4/NumPy episode format."""
 
 import logging
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -74,6 +75,41 @@ def target_safe_frame_ranges(rows, horizon_s):
             raise ValueError(f"Invalid frame range [{start}, {end}) for {video_fp}: metadata has {n_frames} frames")
         safe_rows.append((video_fp, label, start, min(end, safe_end)))
     return safe_rows
+
+
+def sample_goal_frame(frame_times_s, last_idx: int, horizon_s, key: str) -> int:
+    """Deterministically pick a goal frame ``horizon_s=(min, max)`` seconds after ``last_idx``.
+
+    The key (clip path + window start) seeds the draw so validation goals are reproducible.
+    Windows near the episode end fall back to the latest frame at least ``min`` seconds ahead,
+    or the final frame when none exists.
+    """
+    low, high = float(horizon_s[0]), float(horizon_s[1])
+    if not 0 < low <= high:
+        raise ValueError("goal_horizon_s must satisfy 0 < min <= max")
+    relative = np.asarray(frame_times_s[last_idx:], dtype=np.float64) - float(frame_times_s[last_idx])
+    candidates = np.nonzero((relative >= low) & (relative <= high))[0]
+    if len(candidates) == 0:
+        candidates = np.nonzero(relative >= low)[0]
+    if len(candidates) == 0:
+        return len(frame_times_s) - 1
+    rng = np.random.default_rng(zlib.crc32(key.encode()))
+    return int(last_idx + candidates[rng.integers(len(candidates))])
+
+
+def goal_point_targets(frame_positions, frame_orientations, seq_idxs, goal_idx: int) -> np.ndarray:
+    """``(S, 3)`` point goal per observed frame: distance (m), cos and sin of the bearing in that frame's ego frame."""
+    rows = []
+    for seq_idx in np.asarray(seq_idxs):
+        quat = frame_orientations[seq_idx]
+        local_from_odom = rot_from_quat(quat / np.linalg.norm(quat)).T
+        local = local_from_odom @ (frame_positions[goal_idx] - frame_positions[seq_idx])
+        distance = float(np.hypot(local[0], local[1]))
+        if distance < 1e-6:
+            rows.append((0.0, 1.0, 0.0))
+        else:
+            rows.append((distance, local[0] / distance, local[1] / distance))
+    return np.asarray(rows, dtype=np.float32)
 
 
 def get_current_frame_idxs(start_idx, frame_step, seq_step, sequence_length):
@@ -188,8 +224,10 @@ def dali_pose_target_loader(
     t_anchors: np.ndarray,
     num_pts: int,
     use_full_pose: bool,
+    goal_type: str = "none",
+    goal_horizon_s=(3.0, 15.0),
 ):
-    """Return sequence timestamps, ego-frame targets and speeds for a DALI sample."""
+    """Return sequence timestamps, ego-frame targets, speeds and the (point) goal for a DALI sample."""
     flip_sample = bool(int(do_hflip.reshape(-1)[0]))
     start_idx = int(start_frame_num.reshape(-1)[0])
     sample_dir = Path(video_files[int(labels.reshape(-1)[0])]).parent
@@ -202,4 +240,10 @@ def dali_pose_target_loader(
         future_poses[..., 1] *= -1.0
     frame_times_s = np.asarray(arrays[3][seq_idxs], dtype=np.float64)
     frame_speeds = np.asarray(arrays[2][seq_idxs], dtype=np.float32).reshape(-1, 1)
-    return frame_times_s, future_poses, frame_speeds
+    goal = np.zeros((sequence_length, 3), dtype=np.float32)
+    if goal_type == "point":
+        goal_idx = sample_goal_frame(arrays[3], seq_idxs[-1], goal_horizon_s, f"{sample_dir}:{start_idx}")
+        goal = goal_point_targets(arrays[0], arrays[1], seq_idxs, goal_idx)
+        if flip_sample:
+            goal[:, 2] *= -1.0
+    return frame_times_s, future_poses, frame_speeds, goal

@@ -145,6 +145,8 @@ def dali_pipeline(
     shuffle,
     reader_kwargs={},
     frame_wh=None,
+    goal_type="none",
+    goal_horizon_s=(3.0, 15.0),
     # ---- augmentations ----
     use_augs=True,
     p_hflip=0.5,
@@ -200,18 +202,20 @@ def dali_pipeline(
         t_anchors=t_anchors,
         num_pts=num_pts,
         use_full_pose=use_full_pose,
+        goal_type=goal_type,
+        goal_horizon_s=goal_horizon_s,
     )
-    frame_times_s, poses, speeds = fn.python_function(
+    frame_times_s, poses, speeds, goal = fn.python_function(
         label.cpu(),
         start_frame_num.cpu(),
         do_hflip.cpu(),
         function=pose_fn,
         device="cpu",
-        num_outputs=3,
+        num_outputs=4,
         batch_processing=False,
     )
 
-    return videos, frame_times_s, poses, speeds, label, start_frame_num, do_hflip
+    return videos, frame_times_s, poses, speeds, goal, label, start_frame_num, do_hflip
 
 
 class DaliDataset:
@@ -219,6 +223,7 @@ class DaliDataset:
     Video decode + pose targets. Batches include ``reader_label``, ``reader_start_frame``,
     ``reader_hflip`` from the video reader (clip id / debug); training usually ignores them.
     ``target_times_s`` has shape (B,T), relative seconds shared by all sequence frames.
+    ``goal_type=point`` adds ``goal`` (B, S, 3); other goal types need the torch loader.
     """
 
     def __init__(
@@ -246,6 +251,8 @@ class DaliDataset:
         shuffle=False,
         reader_kwargs=None,
         frame_wh=(480, 270),
+        goal_type="none",
+        goal_horizon_s=(3.0, 15.0),
         # ---- augmentations ----
         use_augs=True,
         p_hflip=0.5,
@@ -265,6 +272,9 @@ class DaliDataset:
     ):
         if reader_kwargs is None:
             reader_kwargs = {}
+        if goal_type not in ("none", "point"):
+            raise NotImplementedError(f"DaliDataset supports goal_type none/point; use dataset=torch for {goal_type!r}")
+        self.goal_type = goal_type
         if seq_len < 1:
             raise ValueError(f"seq_len must be >= 1 (final paired length), got {seq_len}")
         if seq_step < 1:
@@ -354,6 +364,8 @@ class DaliDataset:
                     reader_kwargs=reader_kwargs,
                     shuffle=shuffle,
                     frame_wh=frame_wh,
+                    goal_type=goal_type,
+                    goal_horizon_s=tuple(goal_horizon_s),
                     # ---- augmentations ----
                     use_augs=use_augs,
                     p_hflip=p_hflip,
@@ -380,6 +392,7 @@ class DaliDataset:
             "frame_times_s",
             "future_poses",
             "frame_speeds",
+            "goal",
             "reader_label",
             "reader_start_frame",
             "reader_hflip",
@@ -401,6 +414,8 @@ class DaliDataset:
             batch["target_times_s"] = torch.as_tensor(
                 self.t_anchors, dtype=torch.float32, device=batch["future_poses"].device
             ).expand(batch["future_poses"].shape[0], -1)
+            if self.goal_type == "none":
+                batch.pop("goal")
             yield batch
 
     def __len__(self):

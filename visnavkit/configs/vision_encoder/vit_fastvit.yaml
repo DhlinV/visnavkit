@@ -1,6 +1,0 @@
-# @package model.modules.vision_encoder
-defaults:
-  - base
-  - _self_
-_target_: visnavkit.models.spatial_encoders.vision_encoders.vit_fastvit.FastViTEncoder
-backbone_name: fastvit_t8

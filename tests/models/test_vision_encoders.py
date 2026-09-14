@@ -1,94 +1,66 @@
 import pytest
 import torch
-from hydra.utils import instantiate
-from omegaconf import OmegaConf
 
-from visnavkit.models.encoders.dino_encoder import DinoEncoder as LegacyDinoEncoder
-from visnavkit.models.encoders.vision_encoder import VisionEncoder
-from visnavkit.models.spatial_encoders.vision_encoders import (
-    DINOv2Encoder,
-    DINOv3Encoder,
-    DinoEncoder,
-    EfficientNetEncoder,
-    FastViTEncoder,
-    MobileNetEncoder,
-    ResNetEncoder,
-    TimmVisionEncoder,
+from visnavkit.models.vision import TimmCNNEncoder, TimmViTEncoder
+
+SMALL = dict(pretrained=False, feat_size=8, img_embed_size=16, neck_cfg={"n_res_blocks": 0, "dropout": 0})
+
+
+def _cnn(**kwargs):
+    return TimmCNNEncoder(backbone_name="resnet18", out_indices=(2, 3, 4), **SMALL, **kwargs)
+
+
+def _vit(**kwargs):
+    return TimmViTEncoder(backbone_name="vit_small_patch14_dinov2", **SMALL, **kwargs)
+
+
+@pytest.mark.parametrize("factory", [_cnn, _vit])
+@pytest.mark.parametrize("token_mode, expected", [("global", 1), ("patch", 6), ("fused", 7)])
+def test_token_modes(factory, token_mode, expected):
+    model = factory(token_mode=token_mode, patch_grid=(2, 3)).eval()
+    assert model.num_tokens == expected
+    with torch.no_grad():
+        out = model(torch.rand(2, 6, 32, 48))
+    assert out.tokens.shape == (2, expected, 8)
+    assert out.pose.shape == (2, 1)
+    assert out.prev_img_mask.all()
+    assert torch.isfinite(out.tokens).all()
+
+
+@pytest.mark.parametrize(
+    "backbone, out_indices, reductions",
+    [
+        ("resnet18", (2, 3, 4), [8, 16, 32]),
+        ("efficientnet_b0", (2, 3, 4), [8, 16, 32]),
+        ("fastvit_t8", (1, 2, 3), [8, 16, 32]),
+        ("convnext_tiny", (-3, -2, -1), [8, 16, 32]),
+    ],
 )
-
-
-def _encoder(encoder_cls, **kwargs):
-    return encoder_cls(
-        pretrained=False,
-        img_embed_size=16,
-        neck_cfg={"dim": 8, "n_res_blocks": 0, "dropout": 0},
-        **kwargs,
-    )
-
-
-def test_legacy_targets_and_checkpoint_names():
-    assert VisionEncoder is TimmVisionEncoder
-    assert LegacyDinoEncoder is DinoEncoder
-    cfg = OmegaConf.create(
-        {
-            "_target_": "visnavkit.models.encoders.vision_encoder.VisionEncoder",
-            "backbone_name": "resnet18",
-            "pretrained": False,
-            "act_layer": None,
-            "out_indices": [2, 3, 4],
-            "img_embed_size": 16,
-            "neck_cfg": {"dim": 8, "n_res_blocks": 0, "dropout": 0},
-        }
-    )
-    legacy = instantiate(cfg).eval()
-    canonical = _encoder(ResNetEncoder).eval()
-    canonical.load_state_dict(legacy.state_dict(), strict=True)
-    assert {key.split(".")[0] for key in canonical.state_dict()} == {
-        "backbone",
-        "final_linear",
-        "embed_norm",
-        "action_neck",
-        "feat_norm",
-        "pose_neck",
-        "pose_head",
-    }
-    x = torch.rand(2, 6, 32, 48)
+def test_feature_pyramid_backbones(backbone, out_indices, reductions):
+    model = TimmCNNEncoder(
+        backbone_name=backbone,
+        out_indices=out_indices,
+        act_layer="gelu_tanh" if backbone.startswith("fastvit") else None,
+        **SMALL,
+    ).eval()
     with torch.no_grad():
-        expected, actual = legacy(x), canonical(x, export_heads=[])
-    for name in expected:
-        torch.testing.assert_close(actual[name], expected[name])
+        out = model(torch.rand(2, 6, 64, 96))
+    assert out.tokens.shape == (2, 1, 8)
+    assert model.backbone.feature_info.reduction() == reductions
+    assert model.backbone_in_chans == 6
 
 
-@pytest.mark.parametrize("encoder_cls", [FastViTEncoder, ResNetEncoder, EfficientNetEncoder, MobileNetEncoder])
-def test_feature_pyramid_variants(encoder_cls):
-    model = _encoder(encoder_cls).eval()
-    with torch.no_grad():
-        result = model(torch.rand(2, 6, 64, 96), export_heads=[])
-    assert result["pose"].shape == (2, 1)
-    assert result["feat_out"].shape == (2, 8)
-    assert result["prev_img_mask"].all()
-    assert model.backbone.feature_info.reduction() == [8, 16, 32]
-    assert model.get_head_output_names([]) == []
-    if encoder_cls is ResNetEncoder:
-        assert isinstance(model.backbone.act1, torch.nn.ReLU)
-    elif encoder_cls is EfficientNetEncoder:
-        assert any(isinstance(module, torch.nn.SiLU) for module in model.backbone.modules())
-    elif encoder_cls is MobileNetEncoder:
-        assert any(isinstance(module, torch.nn.ReLU6) for module in model.backbone.modules())
-
-
-@pytest.mark.parametrize("out_indices", [(4,), (1, 2, 3, 4)])
-def test_variable_number_of_feature_stages(out_indices):
-    model = _encoder(ResNetEncoder, out_indices=out_indices).eval()
-    with torch.no_grad():
-        result = model(torch.rand(2, 6, 32, 48))
-    assert len(model.embed_dims) == len(out_indices)
-    assert result["feat_out"].shape == (2, 8)
+@pytest.mark.parametrize("pair_mode", ["early", "late"])
+def test_pair_modes_for_both_families(pair_mode):
+    for model in (_cnn(pair_mode=pair_mode).eval(), _vit(pair_mode=pair_mode).eval()):
+        assert model.backbone_in_chans == (6 if pair_mode == "early" else 3)
+        with torch.no_grad():
+            assert model(torch.rand(2, 6, 32, 48)).tokens.shape == (2, 1, 8)
 
 
 @pytest.mark.parametrize("p_drop_prev_img", [0, 1])
 def test_rgb_pairs_normalized_without_mutating_input(p_drop_prev_img):
-    model = _encoder(ResNetEncoder, p_drop_prev_img=p_drop_prev_img).train()
+    model = _cnn(p_drop_prev_img=p_drop_prev_img).train()
     seen = []
     model.backbone.register_forward_pre_hook(lambda _, args: seen.append(args[0].detach().clone()))
     x = torch.rand(2, 6, 32, 48, requires_grad=True)
@@ -100,7 +72,7 @@ def test_rgb_pairs_normalized_without_mutating_input(p_drop_prev_img):
         (model.normalize_frame_transform(prev), model.normalize_frame_transform(original[:, 3:])), dim=1
     )
     torch.testing.assert_close(seen[0], expected)
-    assert result["prev_img_mask"].tolist() == [not p_drop_prev_img] * 2
+    assert result.prev_img_mask.tolist() == [not p_drop_prev_img] * 2
     losses = model.get_losses(result, {"frame_speeds": torch.ones(2, 1)})
     assert torch.isfinite(losses["total"])
     if p_drop_prev_img:
@@ -109,49 +81,46 @@ def test_rgb_pairs_normalized_without_mutating_input(p_drop_prev_img):
     assert x.grad is not None
 
 
-@pytest.mark.parametrize("encoder_cls", [DINOv2Encoder, DINOv3Encoder])
-def test_frozen_dino_training_and_patch_padding(encoder_cls):
-    model = _encoder(encoder_cls, p_drop_prev_img=0)
+@pytest.mark.parametrize("backbone", ["vit_small_patch14_dinov2", "vit_small_patch16_dinov3"])
+def test_frozen_vit_training_and_patch_padding(backbone):
+    model = TimmViTEncoder(backbone_name=backbone, token_mode="fused", patch_grid=(2, 2), p_drop_prev_img=0, **SMALL)
     assert not model.backbone.training
     assert not any(parameter.requires_grad for parameter in model.backbone.parameters())
     model.train()
     assert model.training and not model.backbone.training
-    x = torch.rand(2, 6, 29, 43)
-    result = model(x, export_heads=[])
-    assert result["pose"].shape == (2, 1)
-    assert result["feat_out"].shape == (2, 8)
+    result = model(torch.rand(2, 6, 29, 43))
+    assert result.tokens.shape == (2, 5, 8)
     loss = model.get_losses(result, {"frame_speeds": torch.ones(2, 1)})["total"]
-    assert torch.isfinite(loss)
     loss.backward()
     assert model.final_linear.weight.grad is not None
     assert all(parameter.grad is None for parameter in model.backbone.parameters())
 
 
-def test_dino_backbone_can_be_trained():
-    model = _encoder(DINOv3Encoder, freeze_backbone=False)
+def test_vit_backbone_can_be_trained():
+    model = _vit(freeze_backbone=False)
     assert model.backbone.training
     assert all(parameter.requires_grad for parameter in model.backbone.parameters())
     model.eval().train()
     assert model.backbone.training
 
 
-def test_default_neck_and_invalid_frame_pairs():
-    model = ResNetEncoder(pretrained=False, img_embed_size=16).eval()
-    with torch.no_grad():
-        assert model(torch.rand(2, 6, 32, 48))["feat_out"].shape == (2, 256)
+def test_invalid_inputs_and_options():
+    model = _cnn().eval()
     with pytest.raises(ValueError, match="RGB pair"):
         model(torch.rand(2, 3, 32, 48))
     with pytest.raises(TypeError, match="floating-point"):
         model(torch.zeros(2, 6, 32, 48, dtype=torch.uint8))
-    with pytest.raises(ValueError, match="in_chans=6"):
-        _encoder(ResNetEncoder, in_chans=3)
-    with pytest.raises(ValueError, match="extra heads"):
-        _encoder(DINOv2Encoder, heads={"depth": {}})
+    with pytest.raises(ValueError, match="token_mode"):
+        _cnn(token_mode="cls")
+    with pytest.raises(ValueError, match="pair_mode"):
+        _cnn(pair_mode="middle")
+    with pytest.raises(ValueError, match="spatial heads"):
+        _vit(heads={"depth": {}})
 
 
 @pytest.mark.parametrize("image_size", [(32, 32), (29, 43), (28, 56)])
 def test_dinov2_export_preparation_preserves_outputs_and_original_weights(image_size):
-    model = _encoder(DINOv2Encoder).eval()
+    model = _vit().eval()
     original_positions = model.backbone.pos_embed.detach().clone()
     prepared = model.prepare_for_export(image_size)
     assert prepared is not model
@@ -160,31 +129,40 @@ def test_dinov2_export_preparation_preserves_outputs_and_original_weights(image_
     frames = torch.rand(2, 6, *image_size)
     with torch.no_grad():
         expected, actual = model(frames), prepared(frames)
-    for name in expected:
-        torch.testing.assert_close(actual[name], expected[name], rtol=0, atol=0)
+    torch.testing.assert_close(actual.tokens, expected.tokens, rtol=0, atol=0)
+    torch.testing.assert_close(actual.pose, expected.pose, rtol=0, atol=0)
 
 
 def test_dinov2_padded_nonsquare_onnx_export(tmp_path):
     onnx = pytest.importorskip("onnx")
     ort = pytest.importorskip("onnxruntime")
-    model = _encoder(DINOv2Encoder).eval()
+    model = _vit(token_mode="fused", patch_grid=(2, 2)).eval()
     frames = torch.rand(2, 6, 32, 48)
     prepared = model.prepare_for_export((32, 48))
     path = tmp_path / "dinov2.onnx"
-    names = ["pose", "feat_out", "prev_img_mask"]
+
+    class Wrapper(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.encoder = prepared
+
+        def forward(self, x):
+            out = self.encoder(x)
+            return out.tokens, out.pose
+
     with torch.no_grad():
         expected = model(frames)
         torch.onnx.export(
-            prepared,
+            Wrapper(),
             (frames,),
             path,
             input_names=["frames"],
-            output_names=names,
+            output_names=["tokens", "pose"],
             opset_version=17,
             dynamo=False,
         )
     onnx.checker.check_model(str(path))
     session = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
-    actual = session.run(names, {"frames": frames.numpy()})
-    for name, output in zip(names, actual):
-        torch.testing.assert_close(torch.from_numpy(output), expected[name], rtol=2e-3, atol=2e-4)
+    tokens, pose = session.run(["tokens", "pose"], {"frames": frames.numpy()})
+    torch.testing.assert_close(torch.from_numpy(tokens), expected.tokens, rtol=2e-3, atol=2e-4)
+    torch.testing.assert_close(torch.from_numpy(pose), expected.pose, rtol=2e-3, atol=2e-4)

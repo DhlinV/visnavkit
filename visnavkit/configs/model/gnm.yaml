@@ -1,9 +1,14 @@
-# GNM-style recipe (arXiv:2210.03370): small CNN over the stacked frame pair, no temporal
-# attention, deterministic waypoint regression. Adapted to this repo's goal-free,
-# fixed-horizon setting (no goal image, x/y/v targets).
+# GNM-style (arXiv:2210.03370): MobileNetV2 over the stacked frame pair, no temporal attention,
+# image-goal encoder that stacks the current observation, deterministic waypoint regression.
+# Differences from the paper: fixed-horizon x/y/v targets, no temporal-distance head.
 defaults:
   - base
-  - override /vision_encoder@_global_.vision_encoder: cnn_mobilenet
-  - override /action_decoder@_global_.action_decoder: waypoint
-  - override /temporal_encoder@_global_.temporal_encoder: identity
+  - override vision_encoder: mobilenetv2
+  - override temporal_encoder: identity
+  - override goal_encoder: image
+  - override action_decoder: regression
   - _self_
+
+goal_encoder:
+  backbone_name: mobilenetv2_100
+  stack_observation: true

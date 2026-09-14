@@ -1,0 +1,5 @@
+defaults:
+  - cnn
+  - _self_
+backbone_name: repvit_m1_0
+out_indices: [1, 2, 3]

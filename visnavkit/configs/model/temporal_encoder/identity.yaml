@@ -1,0 +1,5 @@
+defaults:
+  - base
+  - _self_
+_target_: visnavkit.models.temporal.identity.IdentityTemporalEncoder
+num_layers: 0

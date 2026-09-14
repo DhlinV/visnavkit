@@ -1,0 +1,9 @@
+# Goal image from a future frame, encoded by its own backbone (optionally stacked with the current observation).
+_target_: visnavkit.models.goal.image.ImageGoalEncoder
+goal_type: image
+feat_size: ${model.feat_size}
+backbone_name: efficientnet_b0
+pretrained: ${model.vision_encoder.pretrained}
+stack_observation: false
+freeze_backbone: false
+p_drop: 0.0

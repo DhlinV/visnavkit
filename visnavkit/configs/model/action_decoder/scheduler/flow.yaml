@@ -1,0 +1,6 @@
+_target_: visnavkit.models.action.schedulers.flow.FlowMatchingScheduler
+time_sampling: uniform  # uniform | logit_normal (SD3) | beta (openpi pi0, Beta(alpha, beta))
+logit_normal_std: 1.0
+beta_alpha: 1.5
+beta_beta: 1.0
+shift: 1.0  # sampling-time shift t -> s*t / (1 + (s-1)*t); > 1 spends more steps at high noise

@@ -1,0 +1,3 @@
+defaults:
+  - generative
+  - _self_

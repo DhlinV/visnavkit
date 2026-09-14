@@ -1,0 +1,15 @@
+# Shared token projection and auxiliary speed supervision for every vision encoder.
+_recursive_: false
+feat_size: ${model.feat_size}
+token_mode: global  # global | patch | fused
+patch_grid: [4, 4]  # pooled patch tokens per frame for patch / fused
+pretrained: true
+weights: null
+img_embed_size: 1024
+img_embed_drop: 0.1
+p_drop_prev_img: 0.1
+neck_cfg:
+  n_res_blocks: 2
+  dropout: 0.1
+loss_pose_weight: 5
+heads: {}

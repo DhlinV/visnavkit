@@ -1,0 +1,10 @@
+# Generative trajectory decoder = denoiser x scheduler (x optional anchors).
+defaults:
+  - base
+  - denoiser: mlp
+  - scheduler: ddim
+  - _self_
+_target_: visnavkit.models.action.generative.GenerativeDecoder
+num_modes: 5
+sample_steps: 8
+anchors: null

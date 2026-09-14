@@ -1,14 +1,14 @@
 ---
 name: downstream-impl
-description: Implement downstream features in visnavkit (new heads, datasets, experiments, export consumers). Use when adding or modifying components in this repo so contracts and verification steps are honored.
+description: Implement downstream features in visnavkit (new components, datasets, experiments, export consumers). Use when adding or modifying components in this repo so contracts and verification steps are honored.
 ---
 
 # Downstream implementation in visnavkit
 
 ## Ground rules
-- Port proven components from `~/projects/driving-model-track` (autopilot) instead of writing new ones. Smallest viable diff.
-- `uv run` for everything. `train.py` requires a clean git tree (untracked files count) — commit every new file before training.
-- Configs live under `visnavkit/configs/` only (shipped as `visnavkit.configs` package-data so the installed lib can compose them).
+- Smallest viable diff; reuse the stage bases (`BaseVisionEncoder`, `BaseTemporalEncoder`, `BaseGoalEncoder`, `BaseActionDecoder`) over new abstractions.
+- `uv run` for everything. Training records Git provenance; `strict_git=true` requires a clean tree (untracked files count).
+- Configs live under `visnavkit/configs/` only (shipped as `visnavkit.configs` package-data).
 
 ## Contracts (do not break)
 
@@ -18,29 +18,31 @@ description: Implement downstream features in visnavkit (new heads, datasets, ex
 | `frames` | (B, S, 6, h, w) — prev+cur RGB pair | uint8 |
 | `future_poses` | (B, S, plan_len_points, 3) — x, y, v | float32 |
 | `frame_speeds` | (B, S, 1) | float32 |
-| `frame_times_s` | (B, S) | float32 |
+| `frame_times_s` | (B, S) | float64 |
+| `target_times_s` | (B, T) relative seconds | float32 |
+| `goal` (optional) | point (B, S, 3) · image (B, 3, h, w) uint8 · route_image (B, C, h, w) · instruction (B, E) | — |
 
-`dataset=dali` (GPU decode) and `dataset=torch` (torchcodec, CPU) are interchangeable; any new loader must match this dict and the `path label start end` file_list format (`visnavkit/data/file_list.py`). Pose targets come from `visnavkit/data/pose_targets.py` — reuse, never reimplement.
+`dataset=torch` (torchcodec, CPU) supports every goal type; `dataset=dali` (GPU) supports `none`/`point`. The dataset reads `goal_type` from `${model.goal_encoder.goal_type}`. Pose and goal targets come from `visnavkit/data/pose_targets.py` — reuse, never reimplement.
 
 ### Layout
-`data/` datasets + datamodules · `models/` E2EModel/decoder + `encoders/` `temporal_encoders/` `heads/` `layers/` `losses/` + `lit_model.py` · `evaluation/` metrics + calculators · `scripts/` train/export/smoke_forward/benchmark entry points · `configs/` hydra. One file per encoder/temporal_encoder/head variant, swapped via `_target_` in a `configs/model/<recipe>.yaml` (see /model-zoo). New code goes in the matching directory; entry points stay thin (library logic lives outside `scripts/`).
+`models/vision` · `models/temporal` · `models/goal` · `models/action` (+ `denoisers/`, `schedulers/`) · `models/policy.py` (NavigationPolicy) · `models/lit_model.py` · `data/` · `evaluation/` · `benchmark/` · `scripts/` (thin entry points) · `configs/model/<group>/` mirrors the packages.
 
-### Model (E2EModel = VisionEncoder + ActionDecoder)
-- Train forward: `model(x)` with x (B, S, 6, h, w) float in [0,1] → `{"vision": {"pose": ...}, "action": {"plan": {"plans": (B*S, num_modes*(2*num_pts*pose_size+1))}}}`.
-- Export forward: `model(x, fb=...)` single frame + feature buffer → tuple `(plan, pose, feat_out, *head_outputs)`; keep `get_export_output_names()` in sync.
-- New heads: add to `VisionEncoder.heads` ModuleDict or as a `PlanHead`-style module; wire losses through `E2EModel.get_losses` (vision_weight/action_weight).
+### Policy
+- Training: `policy(frames, goal=None, noise=None)` with frames (B, S, 6, h, w) float in [0,1] → `PolicyOutput(vision=VisionOutput(tokens (B*S, K, D), pose), plan=PlanOutput(plans (decisions, M*(2*T*P+1))), goal_tokens)`.
+- Deployment: `policy.predict(frame, feature_buffer, goal=None, noise=None)` → `(plan, pose, feat_out, *heads)`; `export_input_names()` / `export_output_names()` define the ONNX contract and are presence-driven (goal, noise).
+- Losses: `policy.get_losses(out, targets)` combines `vision_encoder.get_losses` and `action_decoder.get_losses` with `loss_cfg` weights.
 
 ### Configs
-- Experiments are self-contained `# @package _global_` files in `configs/experiment/` — copy `baseline.yaml`, keep ALL overrides there, never edit recipe files (model/optimizer/dataset yamls).
-- New dataset config = new file in `configs/dataset/`, keys interpolate from `common.*` in `train.yaml`.
+- Experiments: self-contained `# @package _global_` files in `configs/experiment/`; never edit recipe files for an experiment.
+- Component groups are nested: `model/vision_encoder=...`, `model/temporal_encoder=...`, `model/goal_encoder=...`, `model/action_decoder=...` (+ `model/action_decoder/denoiser=...`, `.../scheduler=...`). Interpolate widths from `${model.feat_size}`.
 
 ## Verify before claiming done (in order)
 ```bash
-uv run python -m visnavkit.scripts.smoke_forward model.modules.vision_encoder.pretrained=false  # forward shapes
+uv run visnavkit-sanity-check --onnx <overrides>          # shapes, loss/backward, buffer parity, ONNX parity
 uv run pytest tests/ -q
-uv run ruff check .
+uv run ruff check visnavkit tests
 uv run python -m visnavkit.scripts.benchmark_dataloader --batches 20 common.data_root=<root>  # if loaders touched
-uv run python -m visnavkit.scripts.export checkpoint=<ckpt> output=/tmp/test.onnx            # if model/export touched
+uv run visnavkit-export checkpoint=<ckpt> output=/tmp/test.onnx                             # if model/export touched
 ```
 Report real shapes/losses from these runs. Then commit, push, and give the exact train command:
-`uv run python -m visnavkit.scripts.train experiment=<name> dataset=<dali|torch>`.
+`uv run visnavkit-train experiment=<name> dataset=<dali|torch>`.

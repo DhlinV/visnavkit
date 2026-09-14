@@ -1,0 +1,4 @@
+defaults:
+  - vit
+  - _self_
+backbone_name: eva02_small_patch14_224

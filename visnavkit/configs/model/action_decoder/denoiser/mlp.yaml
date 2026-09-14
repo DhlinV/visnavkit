@@ -1,0 +1,6 @@
+_target_: visnavkit.models.action.denoisers.mlp.MLPDenoiser
+_partial_: true  # action_dim / num_pts / cond_dim are filled in by the decoder
+hidden: 512
+layers: 3
+time_dim: 64
+dropout: 0.0

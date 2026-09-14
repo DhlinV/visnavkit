@@ -1,0 +1,7 @@
+# Exponential moving average of the weights (diffusers EMAModel / diffusion policy).
+# Enable with `ema=default`; validation, checkpoints and export then use the averaged weights.
+_target_: visnavkit.utils.ema.EMACallback
+decay: 0.9999
+inv_gamma: 1.0
+power: 0.6666666666666666
+every_n_steps: 1

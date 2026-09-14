@@ -1,35 +1,37 @@
 ---
 name: new-head
-description: Add a new plan head variant to visnavkit. Use when implementing a new trajectory decoder (deterministic regression, MHP, diffusion, ...).
+description: Add a new action decoder variant to visnavkit. Use when implementing a new trajectory decoder (deterministic regression, MHP, anchors, diffusion, flow matching, ...).
 ---
 
-# New plan head
+# New action decoder
 
-One file per head in `visnavkit/models/heads/`, swapped via
-`modules.action_decoder.plan_head._target_` in a `configs/model/<name>.yaml` recipe.
+## Fast path: it's a denoiser x scheduler combination
+No code. Add `visnavkit/configs/model/action_decoder/<name>.yaml`:
+```yaml
+defaults: [generative, {override denoiser: dit}, {override scheduler: flow}, _self_]
+sample_steps: 4
+anchors: {_target_: visnavkit.models.action.anchors.AnchorSet, num_anchors: 16}  # optional
+```
+New denoisers go in `models/action/denoisers/` with `forward(x_t (N,T,A), t (N,) in [0,1], cond (N,D), tokens (N,L,D)) -> (N,T,A)`
+and a `_partial_: true` yaml in `configs/model/action_decoder/denoiser/`; new schedulers subclass
+`BaseScheduler` (`sample_t`, `add_noise`, `target`, `step`).
 
-## Contract (all four required)
-- `forward(x)` with x (B*S, feat_size) -> `dict(plans=(B*S, flat_size), ...)`. Extra keys
-  (e.g. conditioning features) are allowed — the same dict comes back to you in get_losses.
-- `plans` MUST use the flat MHP layout: per mode `[mu(num_pts*pose_size),
-  log_b(num_pts*pose_size), conf]`, `flat_size = num_modes * (2*num_pts*pose_size + 1)`.
-  Heads without scales/confidences emit log_b=0, conf=0 (uniform after softmax) — this
-  keeps metrics, export, and `parse_plan_output` unchanged.
-- `get_losses(preds, gt)` where `preds` is YOUR forward dict and gt is future_poses
-  (B*S, num_pts, pose_size) -> `(dict(total, reg, cls), debug_dict)`. No cls concept?
-  Use `torch.zeros_like(reg).detach()`.
-- `parse_output(output)` -> delegate to `parse_plan_output` from `plan_head.py`.
+## New decoder class
+Subclass `BaseActionDecoder` in `visnavkit/models/action/<file>.py`:
+- `decode(cond (N,D), tokens (N,L,D), noise) -> PlanOutput(plans=self.pack(mu, log_b, logits), mu=..., ...)`
+  where `mu` is `(N, M, T, A)` in **normalized action space**; `pack` unnormalizes, maps
+  the action space to poses, and writes the flat `[mu, log_scale, conf]` layout.
+- `loss(preds, gt (N,T,A) normalized, targets) -> (dict(total, reg, cls), debug)`; use
+  `torch.zeros_like(reg)` when there is no classification term.
+- Set `num_modes` in `super().__init__`; set `uses_noise = True` and implement `example_noise`
+  if inference consumes explicit noise (export adds a `noise` input automatically).
+- Generative decoders return zero `plans` in training and keep `cond`/`tokens` for the loss.
 
-Also required: a `self.pretrained` attribute (ActionDecoder checks it before re-initializing
-weights) and `**_ignored` kwargs (recipes inherit the base PlanHead keys via hydra merge).
-
-## Copy from
-`plan_head.py` (MHP + Laplace NLL), `waypoint_head.py` (deterministic single-mode),
-`diffusion_plan_head.py` (DDPM/DDIM; uses forward-dict conditioning in the loss).
+Add `configs/model/action_decoder/<name>.yaml` with `defaults: [base, _self_]` and `_target_`.
 
 ## Verify
 ```bash
-uv run python -m visnavkit.scripts.smoke_forward model=<name> model.modules.vision_encoder.pretrained=false
+uv run visnavkit-sanity-check --onnx model/action_decoder=<name>
 ```
-Add the recipe to the zoo test parametrization + a train-mode loss test (finite loss),
-pytest + ruff. If the head keeps the flat layout, export needs no changes.
+Add `<name>` to `DECODERS` in `tests/models/test_model_configs.py` and to `decoders()` in
+`tests/models/test_action_decoders.py`, then pytest + ruff.

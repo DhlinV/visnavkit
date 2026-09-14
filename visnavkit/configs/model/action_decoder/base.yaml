@@ -1,0 +1,15 @@
+# Shared decoder settings: action space, normalization, token pooling.
+feat_size: ${model.feat_size}
+dropout: 0.1
+pooling: attention  # attention | mean over [context tokens; goal tokens]
+action_space:
+  _target_: visnavkit.models.action.spaces.ActionSpace
+  kind: waypoint  # waypoint (x, y[, v] per anchor) | velocity (speed, yaw rate per segment)
+  pose_size: 3  # dataset target channels: 3 -> (x, y, v), 2 -> (x, y)
+  plan_len_seconds: ${plan_len_seconds}
+  plan_len_points: ${plan_len_points}
+  offset_t_anchors: ${common.offset_t_anchors}
+normalizer:
+  _target_: visnavkit.models.action.normalizer.ActionNormalizer
+  mode: none  # none | meanstd | minmax (stats_path: NPZ with mean/std or min/max)
+  stats_path: null

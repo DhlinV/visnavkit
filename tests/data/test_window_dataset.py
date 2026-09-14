@@ -113,6 +113,77 @@ def test_real_video_decoding_and_target_alignment(tmp_path):
     assert Path(ds.windows[0][0]).is_absolute()
 
 
+def _render_video(ffmpeg, tmp_path, size="32x24"):
+    subprocess.run(
+        [
+            ffmpeg,
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            f"color=c=blue:s={size}:r=20",
+            "-frames:v",
+            "101",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            str(tmp_path / "video.mp4"),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+
+@pytest.mark.parametrize("goal_type", ["point", "image", "route_image", "instruction"])
+def test_goal_targets_follow_the_configured_goal_type(tmp_path, goal_type):
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("ffmpeg is required for the real-video integration test")
+    config = make_episode(tmp_path)
+    _render_video(ffmpeg, tmp_path)
+    np.save(tmp_path / "route_images.npy", np.full((101, 8, 8, 3), 7, dtype=np.uint8))
+    np.save(tmp_path / "instruction_embedding.npy", np.arange(16, dtype=np.float32))
+    ds = Mp4WindowDataset(**config, goal_type=goal_type, goal_horizon_s=(1.0, 2.0))
+    sample = ds[0]
+    goal = sample["goal"]
+    if goal_type == "point":
+        assert goal.shape == (3, 3) and goal.dtype == torch.float32
+        # straight x-axis motion at 1 m/s: goal 1-2 s ahead, directly in front of every frame
+        assert torch.all(goal[:, 0] >= 1.0 - 1e-6) and torch.all(goal[:, 0] <= 2.2)
+        torch.testing.assert_close(goal[:, 1:], torch.tensor([[1.0, 0.0]] * 3))
+        assert torch.equal(goal, ds[0]["goal"])  # deterministic per window
+    elif goal_type == "image":
+        assert goal.shape == (3, 24, 32) and goal.dtype == torch.uint8
+        assert sample["frames"].shape == (3, 6, 24, 32)
+    elif goal_type == "route_image":
+        assert goal.shape == (3, 8, 8) and int(goal[0, 0, 0]) == 7
+    else:
+        torch.testing.assert_close(goal, torch.arange(16, dtype=torch.float32))
+    assert "goal" not in Mp4WindowDataset(**config)[0]
+    with pytest.raises(ValueError, match="goal_type"):
+        Mp4WindowDataset(**config, goal_type="waypoint")
+
+
+def test_hflip_mirrors_point_goals(tmp_path):
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("ffmpeg is required for the real-video integration test")
+    config = make_episode(tmp_path)
+    _render_video(ffmpeg, tmp_path)
+    # goal off to the left (positive y) of a straight path
+    positions = np.load(tmp_path / "frame_positions.npy")
+    positions[:, 1] = np.linspace(0, 2, len(positions))
+    np.save(tmp_path / "frame_positions.npy", positions)
+    plain = Mp4WindowDataset(**config, goal_type="point")[0]["goal"]
+    torch.manual_seed(0)
+    flipped = Mp4WindowDataset(**{**config, "use_augs": True, "p_hflip": 1.0}, goal_type="point")[0]["goal"]
+    torch.testing.assert_close(flipped[:, 2], -plain[:, 2])
+    torch.testing.assert_close(flipped[:, :2], plain[:, :2])
+
+
 def test_dali_and_torch_relative_manifest_target_and_tail_parity(tmp_path):
     pytest.importorskip("nvidia.dali")
     if not torch.cuda.is_available():

@@ -2,8 +2,12 @@ defaults:
   - train
   - _self_
 
-checkpoint: null  # null: export with untrained weights (pipeline check)
+checkpoint: null  # null: export with untrained weights (pipeline check; parity reported, not enforced)
 output: visnavkit.onnx
 onnx_opset_version: 14
 half: true
 export_heads: []
+
+hydra:
+  job:
+    chdir: false

@@ -20,16 +20,26 @@ def write_fixture(path, cfg, *, samples=4, seed=42):
     frames = rng.integers(0, 256, size=shape, dtype=np.uint8)
     times = target_times(cfg).astype(np.float32)
     speed = np.linspace(0, 2, samples, dtype=np.float32)
-    dims = int(cfg.model.modules.action_decoder.plan_head.pose_size)
+    dims = int(cfg.model.action_decoder.action_space.pose_size)
     targets = np.zeros((samples, len(times), dims), dtype=np.float32)
     targets[..., 0] = speed[:, None] * times
     if dims >= 3:
         targets[..., 2] = speed[:, None]
-    np.savez(path, frames=frames, targets=targets, target_times_s=times, current_speed=speed,
-             sample_ids=np.asarray([f"synthetic-{i:04d}" for i in range(samples)]))
-    metadata = {"schema_version": 1, "dataset_kind": "synthetic_fixture",
-                "purpose": "pipeline correctness only; random pixels and analytic straight trajectories",
-                "samples": samples, "seed": seed}
+    np.savez(
+        path,
+        frames=frames,
+        targets=targets,
+        target_times_s=times,
+        current_speed=speed,
+        sample_ids=np.asarray([f"synthetic-{i:04d}" for i in range(samples)]),
+    )
+    metadata = {
+        "schema_version": 1,
+        "dataset_kind": "synthetic_fixture",
+        "purpose": "pipeline correctness only; random pixels and analytic straight trajectories",
+        "samples": samples,
+        "seed": seed,
+    }
     path.with_suffix(".metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
     return metadata
 

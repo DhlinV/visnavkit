@@ -1,0 +1,3 @@
+_target_: visnavkit.models.goal.none.NoGoalEncoder
+goal_type: none
+feat_size: ${model.feat_size}

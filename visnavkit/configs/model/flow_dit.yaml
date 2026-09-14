@@ -1,0 +1,5 @@
+# Base encoder with a flow-matching DiT decoder (rectified flow, Euler sampling).
+defaults:
+  - base
+  - override action_decoder: flow_dit
+  - _self_

@@ -1,0 +1,10 @@
+defaults:
+  - base
+  - _self_
+_target_: visnavkit.models.action.mhp.MHPDecoder
+num_modes: 5
+hidden: 128
+loss_cls_alpha: 1
+mode_selection: angle  # ade | angle | angle-with-tie-break | cosine-similarity
+angle_deg_tiebreak_threshold: 5.0
+log_b_min: -1.609

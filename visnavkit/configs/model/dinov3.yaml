@@ -1,5 +1,5 @@
-# base recipe with a frozen DINOv3 ViT encoder (patch16; 320x240 divides evenly)
+# Base recipe with a frozen DINOv3 ViT-S/16 encoder.
 defaults:
   - base
-  - override /vision_encoder@_global_.vision_encoder: vit_dinov3
+  - override vision_encoder: dinov3_s
   - _self_

@@ -1,8 +1,0 @@
-# @package model.modules.vision_encoder
-defaults:
-  - base
-  - _self_
-_target_: visnavkit.models.spatial_encoders.vision_encoders.cnn_mobilenet.MobileNetEncoder
-backbone_name: mobilenetv2_100
-out_indices: [2, 3, 4]
-act_layer: null

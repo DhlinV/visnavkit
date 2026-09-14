@@ -1,0 +1,5 @@
+defaults:
+  - cnn
+  - _self_
+backbone_name: convnextv2_nano
+out_indices: [1, 2, 3]

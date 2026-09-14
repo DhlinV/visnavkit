@@ -24,13 +24,10 @@ Experiments are self-contained hydra files with the highest precedence. Recipe f
 4. Training records Git provenance. Commit the experiment for reproducibility; `strict_git=true` enforces a clean tree (untracked files count).
 5. Train:
    ```bash
-   uv run python -m visnavkit.scripts.train experiment=<name> dataset=<dali|torch>
+   uv run visnavkit-train experiment=<name> dataset=<dali|torch>
    ```
    Checkpoints monitor `val/action_reg` (min); the default CSV logger writes under `logs/<exp_name>/`. Configure `logger` explicitly for another backend.
 
 ## Afterwards
 - Improvement over baseline: fold the winning overrides into `configs/train.yaml` (or the recipe file they belong to) and DELETE the experiment file.
 - No improvement: keep the file in git as a record, or delete it — never leave stale half-adopted overrides.
-
-## Iteration log
-- 2026-09-08: VisNavKit continuation — verified Git enforcement and logging defaults against `scripts/train.py` and `configs/train.yaml`.

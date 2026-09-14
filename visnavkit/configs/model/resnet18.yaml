@@ -1,7 +1,7 @@
-# ResNet18 behavior-cloning control, not a paper reproduction.
+# ResNet18 single-frame behaviour-cloning control, goal-free, deterministic regression.
 defaults:
   - base
-  - override /vision_encoder@_global_.vision_encoder: cnn_resnet
-  - override /action_decoder@_global_.action_decoder: waypoint
-  - override /temporal_encoder@_global_.temporal_encoder: identity
+  - override vision_encoder: resnet18
+  - override temporal_encoder: identity
+  - override action_decoder: regression
   - _self_

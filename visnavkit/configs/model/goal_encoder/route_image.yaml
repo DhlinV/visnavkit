@@ -1,0 +1,7 @@
+# Rendered route / map patch (route_images.npy sidecar) encoded by a small CNN.
+_target_: visnavkit.models.goal.route.RouteImageGoalEncoder
+goal_type: route_image
+feat_size: ${model.feat_size}
+in_chans: 3
+channels: [32, 64, 128, 256]
+p_drop: 0.0

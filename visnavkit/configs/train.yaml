@@ -1,11 +1,9 @@
 defaults:
   - dataset: null
   - optimizer: adamw
-  - vision_encoder: vit_fastvit
-  - action_decoder: mhp
-  - temporal_encoder: causal
   - model: base
   - metrics: open_loop
+  - ema: null  # ema=default averages the weights (recommended for generative decoders)
   - _self_
   - experiment: null
 
@@ -41,11 +39,15 @@ common:
   downscale_factor: 2
   seq_length: 10
   step: 1
-  use_full_pose: true  # pose_size 3 in model/base.yaml -> (x, y, v) targets
+  use_full_pose: true  # pose_size 3 -> (x, y, v) targets
 
   plan_len_seconds: ${plan_len_seconds}
   plan_len_points: ${plan_len_points}
   # true: t_anchors = build_idxs(plan_len_seconds, plan_len_points + 1)[1:] (no t=0 anchor)
   offset_t_anchors: false
+
+  # Goals are sampled from the episode's own future: a frame between goal_horizon_s[0] and
+  # goal_horizon_s[1] seconds after the last observed frame (point / image goals).
+  goal_horizon_s: [3.0, 15.0]
 
   data_root: /data/nav_clips  # placeholder until the first dataset lands

@@ -24,6 +24,8 @@ train_loader:
   crop_xy: ${common.crop_xy}
   crop_wh: ${common.crop_wh}
   downscale_factor: ${common.downscale_factor}
+  goal_type: ${model.goal_encoder.goal_type}
+  goal_horizon_s: ${common.goal_horizon_s}
   use_augs: true
   p_hflip: 0.5
   use_warp_perspective: false
@@ -53,6 +55,8 @@ val_loader:
   crop_xy: ${common.crop_xy}
   crop_wh: ${common.crop_wh}
   downscale_factor: ${common.downscale_factor}
+  goal_type: ${model.goal_encoder.goal_type}
+  goal_horizon_s: ${common.goal_horizon_s}
   use_augs: false
   p_hflip: 0.0
   use_warp_perspective: false

@@ -1,9 +1,14 @@
-# ViNT-style recipe (arXiv:2306.14846): EfficientNet-B0 frame encoder + multi-layer
-# transformer over the frame sequence + deterministic waypoint regression. Adapted to
-# this repo's goal-free, fixed-horizon setting (no goal token / topological graph).
+# ViNT-style (arXiv:2306.14846): EfficientNet-B0 frame encoder, 4-layer transformer over the
+# window, image-goal token (observation + goal stacked), deterministic waypoint regression.
+# Differences from the paper: fixed-horizon x/y/v targets, no temporal-distance head.
 defaults:
   - base
-  - override /vision_encoder@_global_.vision_encoder: cnn_efficientnet
-  - override /action_decoder@_global_.action_decoder: waypoint
-  - override /temporal_encoder@_global_.temporal_encoder: causal_4layer
+  - override vision_encoder: efficientnet_b0
+  - override temporal_encoder: causal_4layer
+  - override goal_encoder: image
+  - override action_decoder: regression
   - _self_
+
+goal_encoder:
+  backbone_name: efficientnet_b0
+  stack_observation: true

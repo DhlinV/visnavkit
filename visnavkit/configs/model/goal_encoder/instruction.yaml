@@ -1,0 +1,8 @@
+# Precomputed text embedding (instruction_embedding.npy sidecar, e.g. CLIP 512-d).
+_target_: visnavkit.models.goal.instruction.InstructionGoalEncoder
+goal_type: instruction
+feat_size: ${model.feat_size}
+embed_dim: 512
+hidden: 512
+num_tokens: 1
+p_drop: 0.0

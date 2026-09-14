@@ -1,0 +1,5 @@
+defaults:
+  - cnn
+  - _self_
+backbone_name: convnext_tiny
+out_indices: [1, 2, 3]

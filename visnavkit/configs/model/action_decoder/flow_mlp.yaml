@@ -1,0 +1,4 @@
+defaults:
+  - generative
+  - override scheduler: flow
+  - _self_

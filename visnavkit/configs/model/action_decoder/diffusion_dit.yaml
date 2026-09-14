@@ -1,0 +1,4 @@
+defaults:
+  - generative
+  - override denoiser: dit
+  - _self_

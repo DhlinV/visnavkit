@@ -1,0 +1,8 @@
+defaults:
+  - base
+  - _self_
+_target_: visnavkit.models.temporal.bidirectional.BidirectionalTemporalEncoder
+# One decision after observing the entire window; reduction=none needs allow_offline=true.
+reduction: last
+mask_p: 0.0
+allow_offline: false

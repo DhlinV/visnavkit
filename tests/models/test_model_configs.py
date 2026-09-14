@@ -1,10 +1,23 @@
-"""Architecture recipes remain composable through independent Hydra groups."""
+"""Recipes compose from independent nested Hydra groups under model/."""
 
 import pytest
 import torch
 from hydra import compose, initialize_config_module
 from hydra.utils import instantiate
-from omegaconf import OmegaConf, open_dict
+from omegaconf import OmegaConf
+
+SMALL = [
+    "common.seq_length=3",
+    "common.crop_wh=[32,32]",
+    "common.downscale_factor=1",
+    "model.feat_size=8",
+    "plan_len_points=4",
+    "model.vision_encoder.pretrained=false",
+    "model.vision_encoder.img_embed_size=16",
+    "model.vision_encoder.neck_cfg.n_res_blocks=0",
+    "model.temporal_encoder.num_heads=2",
+    "model.temporal_encoder.ff_dim=16",
+]
 
 
 def _compose(*overrides):
@@ -12,103 +25,222 @@ def _compose(*overrides):
         return compose(config_name="train", overrides=list(overrides))
 
 
-def _assert_components(cfg, vision, temporal, head, layers):
-    modules = cfg.model.modules
-    assert modules.vision_encoder._target_ == f"visnavkit.models.spatial_encoders.vision_encoders.{vision}"
-    assert modules.action_decoder._target_ == "visnavkit.models.action_decoders.base.ActionDecoder"
-    assert modules.action_decoder.temporal_encoder._target_ == f"visnavkit.models.temporal_encoders.{temporal}"
-    assert modules.action_decoder.plan_head._target_ == f"visnavkit.models.action_decoders.{head}"
-    assert modules.action_decoder.temporal_encoder.get("num_layers", 1) == layers
-    assert modules.vision_encoder.neck_cfg.dim == cfg.model.feat_size
-    assert modules.action_decoder.temporal_encoder.embed_dim == cfg.model.feat_size
-    assert modules.action_decoder.plan_head.feat_size == cfg.model.feat_size
-    assert modules.action_decoder.plan_head.num_pts == cfg.plan_len_points
-    # Resolve the whole model, so missing interpolation targets cannot hide in unused fields.
-    OmegaConf.to_container(cfg.model, resolve=True, throw_on_missing=True)
+def _targets(cfg):
+    model = cfg.model
+    return (
+        model.vision_encoder._target_.rsplit(".", 1)[1],
+        model.temporal_encoder._target_.rsplit(".", 1)[1],
+        model.goal_encoder.goal_type,
+        model.action_decoder._target_.rsplit(".", 1)[1],
+    )
 
 
 @pytest.mark.parametrize(
-    "recipe, vision, temporal, head, layers",
+    "recipe, expected, layers",
     [
-        ("base", "vit_fastvit.FastViTEncoder", "causal.CausalTemporalEncoder", "mhp.PlanHead", 1),
-        ("mimic", "vit_fastvit.FastViTEncoder", "causal.CausalTemporalEncoder", "mhp.PlanHead", 1),
-        ("diffusion", "vit_fastvit.FastViTEncoder", "causal.CausalTemporalEncoder", "diffusion.DiffusionPlanHead", 1),
-        ("dinov2", "vit_dinov2.DINOv2Encoder", "causal.CausalTemporalEncoder", "mhp.PlanHead", 1),
-        ("dinov3", "vit_dinov3.DINOv3Encoder", "causal.CausalTemporalEncoder", "mhp.PlanHead", 1),
-        ("s2e", "vit_dinov3.DINOv3Encoder", "causal.CausalTemporalEncoder", "mhp.PlanHead", 1),
-        ("gnm", "cnn_mobilenet.MobileNetEncoder", "identity.IdentityTemporalEncoder", "waypoint.WaypointHead", 0),
-        ("resnet18", "cnn_resnet.ResNetEncoder", "identity.IdentityTemporalEncoder", "waypoint.WaypointHead", 0),
-        ("vint", "cnn_efficientnet.EfficientNetEncoder", "causal.CausalTemporalEncoder", "waypoint.WaypointHead", 4),
-        ("citywalker", "vit_dinov2.DINOv2Encoder", "causal.CausalTemporalEncoder", "waypoint.WaypointHead", 4),
-        ("nomad", "cnn_efficientnet.EfficientNetEncoder", "causal.CausalTemporalEncoder", "diffusion.DiffusionPlanHead", 4),
+        ("base", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "MHPDecoder"), 1),
+        ("mimic", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "MHPDecoder"), 1),
+        ("resnet18", ("TimmCNNEncoder", "IdentityTemporalEncoder", "none", "RegressionDecoder"), 0),
+        ("gnm", ("TimmCNNEncoder", "IdentityTemporalEncoder", "image", "RegressionDecoder"), 0),
+        ("vint", ("TimmCNNEncoder", "CausalTemporalEncoder", "image", "RegressionDecoder"), 4),
+        ("nomad", ("TimmCNNEncoder", "CausalTemporalEncoder", "image", "GenerativeDecoder"), 4),
+        ("citywalker", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "RegressionDecoder"), 4),
+        ("s2e", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "MHPDecoder"), 1),
+        ("dinov2", ("TimmViTEncoder", "CausalTemporalEncoder", "none", "MHPDecoder"), 1),
+        ("dinov3", ("TimmViTEncoder", "CausalTemporalEncoder", "none", "MHPDecoder"), 1),
+        ("diffusion", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "GenerativeDecoder"), 1),
+        ("flow_dit", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "GenerativeDecoder"), 1),
+        ("anchor", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "AnchorDecoder"), 1),
     ],
 )
-def test_existing_recipes_select_canonical_components(recipe, vision, temporal, head, layers):
+def test_recipes_select_expected_components(recipe, expected, layers):
     cfg = _compose(f"model={recipe}")
-    _assert_components(cfg, vision, temporal, head, layers)
-    assert cfg.model.modules.action_decoder.temporal_encoder.reduction == "none"
-    assert cfg.model.modules.action_decoder.plan_head.num_modes == (1 if head == "waypoint.WaypointHead" else 5)
+    assert _targets(cfg) == expected
+    assert cfg.model.temporal_encoder.get("num_layers", 1) == layers
+    assert cfg.model.vision_encoder.feat_size == cfg.model.feat_size
+    assert cfg.model.action_decoder.feat_size == cfg.model.feat_size
+    assert cfg.model.action_decoder.action_space.plan_len_points == cfg.plan_len_points
+    OmegaConf.to_container(cfg.model, resolve=True, throw_on_missing=True)
 
 
-_CROSS_OVERRIDES = [
-    (
-        ["model=vint", "temporal_encoder=identity", "action_decoder=mhp"],
-        "cnn_efficientnet.EfficientNetEncoder", "identity.IdentityTemporalEncoder", "mhp.PlanHead", 0,
-    ),
-    (
-        ["model=gnm", "vision_encoder=vit_dinov3", "temporal_encoder=causal", "action_decoder=diffusion"],
-        "vit_dinov3.DINOv3Encoder", "causal.CausalTemporalEncoder", "diffusion.DiffusionPlanHead", 1,
-    ),
-    (
-        ["model=nomad", "vision_encoder=cnn_resnet", "temporal_encoder=bidirectional", "action_decoder=waypoint"],
-        "cnn_resnet.ResNetEncoder", "bidirectional.BidirectionalTemporalEncoder", "waypoint.WaypointHead", 1,
-    ),
+def test_dataset_follows_the_goal_encoder():
+    cfg = _compose("dataset=torch", "model=s2e")
+    assert cfg.dataset.train_loader.goal_type == "point"
+    assert cfg.dataset.val_loader.goal_horizon_s == cfg.common.goal_horizon_s
+    cfg = _compose("dataset=torch", "model=gnm", "model/goal_encoder=none")
+    assert cfg.dataset.train_loader.goal_type == "none"
+
+
+@pytest.mark.parametrize(
+    "overrides, expected",
+    [
+        (
+            ["model=vint", "model/temporal_encoder=identity", "model/action_decoder=mhp"],
+            ("TimmCNNEncoder", "IdentityTemporalEncoder", "image", "MHPDecoder"),
+        ),
+        (
+            [
+                "model=gnm",
+                "model/vision_encoder=dinov3_s",
+                "model/goal_encoder=point",
+                "model/action_decoder=flow_unet",
+            ],
+            ("TimmViTEncoder", "IdentityTemporalEncoder", "point", "GenerativeDecoder"),
+        ),
+        (
+            [
+                "model=nomad",
+                "model/vision_encoder=resnet18",
+                "model/temporal_encoder=bidirectional",
+                "model/goal_encoder=instruction",
+            ],
+            ("TimmCNNEncoder", "BidirectionalTemporalEncoder", "instruction", "GenerativeDecoder"),
+        ),
+    ],
+)
+def test_component_overrides_replace_recipe_defaults(overrides, expected):
+    cfg = _compose(*overrides)
+    assert _targets(cfg) == expected
+    decoder = cfg.model.action_decoder
+    if expected[3] != "MHPDecoder":
+        assert "mode_selection" not in decoder
+    if expected[3] != "GenerativeDecoder":
+        assert "denoiser" not in decoder and "scheduler" not in decoder
+    encoder = cfg.model.vision_encoder
+    if expected[0] == "TimmViTEncoder":
+        assert "out_indices" not in encoder
+    else:
+        assert "backbone_name" in encoder and "out_indices" in encoder
+
+
+DECODERS = [
+    "regression",
+    "mhp",
+    "anchor",
+    "diffusion_mlp",
+    "diffusion_dit",
+    "diffusion_unet",
+    "flow_mlp",
+    "flow_dit",
+    "flow_unet",
+    "anchor_diffusion_dit",
+    "anchor_flow_dit",
 ]
 
 
-@pytest.mark.parametrize("overrides, vision, temporal, head, layers", _CROSS_OVERRIDES)
-def test_component_overrides_replace_recipe_defaults_without_stale_options(overrides, vision, temporal, head, layers):
-    cfg = _compose(*overrides)
-    _assert_components(cfg, vision, temporal, head, layers)
-    encoder = cfg.model.modules.vision_encoder
-    plan_head = cfg.model.modules.action_decoder.plan_head
-    if vision.startswith("vit_dino"):
-        assert "out_indices" not in encoder and "act_layer" not in encoder
+def _small_decoder(name):
+    overrides = [f"model/action_decoder={name}", "model/vision_encoder=resnet18"]
+    if name in ("regression", "mhp", "anchor"):
+        return overrides + ["model.action_decoder.hidden=16"]
+    overrides.append("model.action_decoder.sample_steps=2")
+    if "dit" in name:
+        overrides += [
+            "model.action_decoder.denoiser.hidden=16",
+            "model.action_decoder.denoiser.depth=1",
+            "model.action_decoder.denoiser.num_heads=2",
+        ]
+    elif "unet" in name:
+        overrides += ["model.action_decoder.denoiser.down_dims=[8,16]", "model.action_decoder.denoiser.n_groups=4"]
     else:
-        assert "freeze_backbone" not in encoder
-    if head != "mhp.PlanHead":
-        assert "mode_selection" not in plan_head and "loss_cls_alpha" not in plan_head
-    if head != "diffusion.DiffusionPlanHead":
-        assert "sample_steps" not in plan_head and "train_timesteps" not in plan_head
-    assert plan_head.num_modes == (1 if head == "waypoint.WaypointHead" else 5)
-    expected_reduction = "last" if temporal.startswith("bidirectional") else "none"
-    assert cfg.model.modules.action_decoder.temporal_encoder.reduction == expected_reduction
+        overrides += ["model.action_decoder.denoiser.hidden=16"]
+    return overrides
 
 
-@pytest.mark.parametrize("overrides, vision, temporal, head, layers", _CROSS_OVERRIDES)
-def test_composed_component_overrides_run_a_small_forward(overrides, vision, temporal, head, layers):
-    cfg = _compose(*overrides)
-    cfg.common.seq_length = 3
-    cfg.model.feat_size = 8
-    cfg.plan_len_points = 3
-    encoder = cfg.model.modules.vision_encoder
-    encoder.pretrained = False
-    encoder.img_embed_size = 16
-    encoder.neck_cfg.n_res_blocks = 0
-    temporal_cfg = cfg.model.modules.action_decoder.temporal_encoder
-    temporal_cfg.num_heads = 2
-    temporal_cfg.ff_dim = 16
-    plan_head = cfg.model.modules.action_decoder.plan_head
-    with open_dict(plan_head):
-        plan_head.hidden = 16
-    if head == "diffusion.DiffusionPlanHead":
-        plan_head.time_embed_dim = 8
-        plan_head.train_timesteps = 5
-        plan_head.sample_steps = 2
+@pytest.mark.parametrize("name", DECODERS)
+def test_every_action_decoder_group_runs(name):
+    cfg = _compose(*SMALL, *_small_decoder(name))
     model = instantiate(cfg.model).eval()
     with torch.no_grad():
-        output = model(torch.rand(2, 3, 6, 32, 32))
-    batch = 6 if temporal_cfg.reduction == "none" else 2
-    assert output["vision"]["pose"].shape == (6, 1)
-    assert output["action"]["plan"]["plans"].shape == (batch, plan_head.num_modes * 19)
-    assert torch.isfinite(output["action"]["plan"]["plans"]).all()
+        out = model(torch.rand(2, 3, 6, 32, 32))
+    assert out.plan.plans.shape == (6, model.action_decoder.flat_size)
+    assert torch.isfinite(out.plan.plans).all()
+    if name.startswith("anchor"):
+        assert model.action_decoder.num_modes == 16
+
+
+@pytest.mark.parametrize("name", ["none", "point", "image", "route_image", "instruction"])
+def test_every_goal_encoder_group_runs(name):
+    cfg = _compose(
+        *SMALL, f"model/goal_encoder={name}", "model/vision_encoder=resnet18", "model.action_decoder.hidden=16"
+    )
+    if "pretrained" in cfg.model.goal_encoder:
+        cfg.model.goal_encoder.pretrained = False
+    model = instantiate(cfg.model).eval()
+    encoder = model.goal_encoder
+    goal = None
+    if encoder.num_tokens:
+        goal = (
+            encoder.example_input(6, image_hw=(32, 32)).reshape(2, 3, -1)
+            if encoder.per_frame
+            else encoder.example_input(2, image_hw=(32, 32))
+        )
+    with torch.no_grad():
+        out = model(torch.rand(2, 3, 6, 32, 32), goal=goal)
+    assert out.plan.plans.shape[0] == 6
+    assert model.export_input_names() == ["input", "feature_buffer"] + (["goal"] if name != "none" else [])
+
+
+@pytest.mark.parametrize("name", ["identity", "causal", "causal_4layer", "bidirectional"])
+@pytest.mark.parametrize("token_mode", ["global", "fused"])
+def test_temporal_groups_and_token_modes(name, token_mode):
+    cfg = _compose(
+        *SMALL,
+        f"model/temporal_encoder={name}",
+        "model/vision_encoder=resnet18",
+        "model.action_decoder.hidden=16",
+        f"model.vision_encoder.token_mode={token_mode}",
+        "model.vision_encoder.patch_grid=[2,2]",
+    )
+    model = instantiate(cfg.model).eval()
+    with torch.no_grad():
+        out = model(torch.rand(2, 3, 6, 32, 32))
+    decisions = 2 if name == "bidirectional" else 6
+    assert out.plan.plans.shape[0] == decisions
+    assert out.vision.tokens.shape[1] == (1 if token_mode == "global" else 5)
+
+
+VISION_PRESETS = [
+    "fastvit_t8",
+    "resnet18",
+    "resnet50",
+    "efficientnet_b0",
+    "mobilenetv2",
+    "mobilenetv3",
+    "mobilenetv4",
+    "convnext_tiny",
+    "convnextv2_nano",
+    "regnety_008",
+    "repvit_m1",
+    "efficientvit_b0",
+    "dinov2_s",
+    "dinov3_s",
+    "vit_s",
+    "deit_s",
+    "eva02_s",
+]
+
+
+@pytest.mark.parametrize("name", VISION_PRESETS)
+def test_vision_presets_run_a_small_forward(name):
+    cfg = _compose(*SMALL, f"model/vision_encoder={name}", "model.action_decoder.hidden=16")
+    model = instantiate(cfg.model).eval()
+    with torch.no_grad():
+        out = model(torch.rand(2, 3, 6, 32, 32))
+    assert out.vision.tokens.shape == (6, 1, 8) and torch.isfinite(out.vision.tokens).all()
+
+
+@pytest.mark.parametrize("name", ["dinov2_b", "dinov3_b", "siglip_b", "clip_b", "fastvit_t12"])
+def test_large_vision_presets_compose(name):
+    cfg = _compose(*SMALL, f"model/vision_encoder={name}")
+    OmegaConf.to_container(cfg.model, resolve=True, throw_on_missing=True)
+    assert cfg.model.vision_encoder.backbone_name
+
+
+def test_ema_group_is_optional_and_builds_a_trainer_callback():
+    from visnavkit.scripts.train import create_trainer
+    from visnavkit.utils.ema import EMACallback
+
+    assert _compose("model=base").get("ema") is None
+    cfg = _compose("model=base", "ema=default", "logger=null", "+trainer.kwargs.accelerator=cpu")
+    assert isinstance(instantiate(cfg.ema), EMACallback)
+    assert any(isinstance(callback, EMACallback) for callback in create_trainer(cfg).callbacks)

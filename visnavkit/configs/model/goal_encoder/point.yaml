@@ -1,0 +1,7 @@
+# (distance_m, cos, sin) of the goal in the current ego frame; the dataset samples goals from the future trajectory.
+_target_: visnavkit.models.goal.point.PointGoalEncoder
+goal_type: point
+feat_size: ${model.feat_size}
+hidden: 256
+max_distance: 20.0
+p_drop: 0.0  # goal dropout: learn goal-free behaviour too (NoMaD-style masking)

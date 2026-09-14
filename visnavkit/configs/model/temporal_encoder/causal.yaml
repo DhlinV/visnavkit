@@ -1,0 +1,4 @@
+defaults:
+  - base
+  - _self_
+_target_: visnavkit.models.temporal.causal.CausalTemporalEncoder

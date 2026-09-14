@@ -1,7 +1,0 @@
-# @package model.modules.vision_encoder
-defaults:
-  - base
-  - _self_
-_target_: visnavkit.models.spatial_encoders.vision_encoders.vit_dinov2.DINOv2Encoder
-backbone_name: vit_small_patch14_dinov2
-freeze_backbone: true

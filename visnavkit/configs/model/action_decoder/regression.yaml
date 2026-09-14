@@ -1,0 +1,7 @@
+defaults:
+  - base
+  - _self_
+_target_: visnavkit.models.action.regression.RegressionDecoder
+hidden: 256
+layers: 2
+loss: l1

@@ -1,0 +1,5 @@
+defaults:
+  - generative
+  - override denoiser: unet
+  - override scheduler: flow
+  - _self_

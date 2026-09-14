@@ -1,5 +1,5 @@
-# FastViT with a diffusion action decoder (DDPM training, DDIM sampling).
+# Base encoder with an MLP diffusion decoder (DDPM training, DDIM sampling).
 defaults:
   - base
-  - override /action_decoder@_global_.action_decoder: diffusion
+  - override action_decoder: diffusion_mlp
   - _self_

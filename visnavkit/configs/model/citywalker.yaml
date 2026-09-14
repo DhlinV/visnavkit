@@ -1,8 +1,9 @@
-# CityWalker-style recipe (CVPR 2025): frozen DINOv2 frame features + transformer over
-# the frame sequence + deterministic waypoint regression. Adapted to this repo's
-# goal-free, fixed-horizon setting (no goal coordinates).
+# CityWalker-style (CVPR 2025): frozen DINOv2 frame features, 4-layer transformer over the window,
+# point-goal conditioning, deterministic waypoint regression. Differences: no past-odometry input.
 defaults:
-  - dinov2
-  - override /action_decoder@_global_.action_decoder: waypoint
-  - override /temporal_encoder@_global_.temporal_encoder: causal_4layer
+  - base
+  - override vision_encoder: dinov2_s
+  - override temporal_encoder: causal_4layer
+  - override goal_encoder: point
+  - override action_decoder: regression
   - _self_

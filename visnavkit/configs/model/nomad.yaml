@@ -1,7 +1,9 @@
-# NoMaD-style recipe (arXiv:2310.07896): the ViNT encoder/transformer with a diffusion
-# policy head instead of deterministic waypoints. Goal masking is out of scope in this
-# goal-free setting.
+# NoMaD-style (arXiv:2310.07896): the ViNT encoder/transformer with goal masking (goal dropout)
+# and a 1D conditional U-Net diffusion policy over the trajectory.
 defaults:
   - vint
-  - override /action_decoder@_global_.action_decoder: diffusion
+  - override action_decoder: diffusion_unet
   - _self_
+
+goal_encoder:
+  p_drop: 0.5

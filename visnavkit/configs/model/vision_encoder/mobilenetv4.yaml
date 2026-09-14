@@ -1,0 +1,5 @@
+defaults:
+  - cnn
+  - _self_
+backbone_name: mobilenetv4_conv_small
+out_indices: [2, 3, 4]

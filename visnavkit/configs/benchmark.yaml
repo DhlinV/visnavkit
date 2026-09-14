@@ -46,9 +46,8 @@ hooks:
 
 # No pretrained download is needed for size/latency or pipeline checks.
 model:
-  modules:
-    vision_encoder:
-      pretrained: false
+  vision_encoder:
+    pretrained: false
 
 hydra:
   job:

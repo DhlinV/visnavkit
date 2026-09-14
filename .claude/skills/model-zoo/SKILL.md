@@ -5,37 +5,37 @@ description: Use or extend the reference-model recipes (GNM, ViNT, NoMaD, CityWa
 
 # Model zoo
 
-Every recipe in `visnavkit/configs/model/` composes three swappable parts — vision
-encoder x temporal_encoder x plan head — purely via yaml (`defaults: [base|<parent>, _self_]`
-plus `_target_` overrides). No recipe has its own model class.
+Every recipe in `visnavkit/configs/model/` composes four swappable groups — vision
+encoder x temporal encoder x goal encoder x action decoder — purely via yaml
+(`defaults: [base|<parent>, {override <group>: <choice>}, _self_]`). No recipe has its own class.
 
-| recipe | encoder | temporal_encoder | head |
-|---|---|---|---|
-| base | FastViT-T8 (pair-stacked) | causal transformer x1 | PlanHead (MHP, Laplace NLL) |
-| gnm | MobileNetV2 | none (`num_layers: 0`) | WaypointHead |
-| vint | EfficientNet-B0 | transformer x4 | WaypointHead |
-| nomad | EfficientNet-B0 | transformer x4 | DiffusionPlanHead |
-| citywalker | DINOv2 ViT-S (frozen) | transformer x4 | WaypointHead |
-| s2e | DINOv3 ViT-S (frozen) | causal transformer x1 | PlanHead |
-| mimic | = base | = base | = base |
-| dinov2 / dinov3 | DINO ViT-S (frozen) | = base | = base |
-| diffusion | = base | = base | DiffusionPlanHead |
+| recipe | vision | temporal | goal | action decoder |
+|---|---|---|---|---|
+| base / mimic | fastvit_t8 (pair-stacked) | causal x1 | none | mhp |
+| resnet18 | resnet18 | identity | none | regression |
+| gnm | mobilenetv2 | identity | image (stack_observation) | regression |
+| vint | efficientnet_b0 | causal_4layer | image (stack_observation) | regression |
+| nomad | efficientnet_b0 | causal_4layer | image, p_drop 0.5 | diffusion_unet |
+| citywalker | dinov2_s (frozen) | causal_4layer | point | regression |
+| s2e | dinov3_s (frozen) | causal x1 | point, p_drop 0.5 | mhp |
+| dinov2 / dinov3 | DINO ViT-S (frozen) | causal x1 | none | mhp |
+| diffusion / flow_dit / anchor | fastvit_t8 | causal x1 | none | diffusion_mlp / flow_dit / anchor |
 
-All recipes are ADAPTATIONS to this repo's data contract (goal-free, fixed horizon,
-prev+cur frame pair, x/y/v targets) — describe them as "-style", never as reproductions.
-Paper components that don't transfer (goal images/coordinates, goal masking, topological
-graphs, RL post-training) are intentionally omitted.
+All recipes are ADAPTATIONS to this repo's data contract (prev+cur frame pair, fixed-horizon
+x/y/v targets, goals sampled from the clip's own future) — describe them as "-style", never as
+reproductions. Paper components that don't transfer (temporal-distance heads, topological
+graphs, past-odometry inputs, RL post-training) are intentionally omitted.
 
 ## Run one
 ```bash
-uv run python -m visnavkit.scripts.train experiment=<name> dataset=<dali|torch> model=<recipe>
+uv run visnavkit-train experiment=<name> dataset=<dali|torch> model=<recipe>
 ```
 (or set the model inside the experiment file).
 
 ## Add one
 1. New components only if yaml can't express it — see /new-encoder and /new-head.
 2. `configs/model/<name>.yaml` inheriting the closest parent recipe (chained defaults work,
-   e.g. nomad -> vint -> base).
+   e.g. nomad -> vint -> base) with `override <group>: <choice>` lines.
 3. Head-comment cites the paper (arXiv id) and names what was adapted or omitted.
-4. Add `<name>` to the zoo parametrization in `tests/models/test_smoke_forward.py`.
-5. Add a row to this table and the README zoo table.
+4. Add `<name>` to `tests/models/test_model_configs.py` (recipe table) and `test_smoke_forward.py`.
+5. Add a row to this table and the README recipe table.

@@ -63,7 +63,9 @@ against the requested recipe to prevent mislabeling. Keep `.metadata.json` and
 
 The exporter runs all observed frames and makes one decision per window. It
 exports fixed batch and context dimensions with `trajectories (N,K,T,D)`,
-`scores (N,K)`, and auxiliary `speed`. Native diffusion has explicit initial
+`scores (N,K)`, and auxiliary `speed`. Goal-conditioned recipes are exported with
+their learned null goal token (goal-free inference, as in NoMaD exploration) and the
+metadata records `conditioning: null_goal_token`; prepared datasets carry no goals yet. Native diffusion has explicit initial
 noise and includes every candidate and denoising step. Independent-sample
 evaluation requires batch-one exports. The existing deployment export command
 uses a feature buffer; those timings have a different scope.

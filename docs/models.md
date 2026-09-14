@@ -41,12 +41,12 @@ files. Built-in `Artifact` URLs refer to the pinned zoo release.
 
 | ID | Primary source | Published export | Local recipe status |
 | --- | --- | --- | --- |
-| `gnm` | [GNM / official code](https://github.com/robodhruv/visualnav-transformer) | Image-goal graph; six RGB frames, 64×85 | `gnm` is a goal-free architecture adaptation |
-| `vint` | [ViNT / official code](https://github.com/robodhruv/visualnav-transformer) | Image-goal graph; six RGB frames, 64×85 | `vint` is a goal-free architecture adaptation |
-| `nomad` | [NoMaD / official code](https://github.com/robodhruv/visualnav-transformer) | Three component graphs; four RGB frames, 96×96 | `nomad` uses a different denoiser and omits goal masking |
-| `citywalker` | [CityWalker](https://github.com/ai4ce/CityWalker) | Five RGB frames, 350×630, past coordinates and point-goal | `citywalker` omits coordinate conditioning and changes the decoder |
-| `s2e` | [S2E](https://github.com/VAIL-UCLA/S2E) | BC Web100 variant; eleven RGB frames, 256×256, point-goal | `s2e` is a DINOv3/MHP adaptation |
-| `mimic` | [MIMIC, Honglin He et al.](https://vail-ucla.github.io/MIMIC/) | Goal-free variant; sixteen RGB frames, 288×512; fixed batch one | `mimic` lacks the paper's hierarchical anchor decoder |
+| `gnm` | [GNM / official code](https://github.com/robodhruv/visualnav-transformer) | Image-goal graph; six RGB frames, 64×85 | `gnm` is an image-goal architecture adaptation (no temporal-distance head) |
+| `vint` | [ViNT / official code](https://github.com/robodhruv/visualnav-transformer) | Image-goal graph; six RGB frames, 64×85 | `vint` is an image-goal architecture adaptation (no temporal-distance head) |
+| `nomad` | [NoMaD / official code](https://github.com/robodhruv/visualnav-transformer) | Three component graphs; four RGB frames, 96×96 | `nomad` uses a 1D U-Net denoiser with goal dropout; sampler and normalization differ |
+| `citywalker` | [CityWalker](https://github.com/ai4ce/CityWalker) | Five RGB frames, 350×630, past coordinates and point-goal | `citywalker` uses point-goal conditioning; omits past-odometry input |
+| `s2e` | [S2E](https://github.com/VAIL-UCLA/S2E) | BC Web100 variant; eleven RGB frames, 256×256, point-goal | `s2e` is a DINOv3 + point-goal + MHP adaptation; no RL stage |
+| `mimic` | [MIMIC, Honglin He et al.](https://vail-ucla.github.io/MIMIC/) | Goal-free variant; sixteen RGB frames, 288×512; fixed batch one | `mimic` equals `base`; `model/action_decoder=anchor` adds an anchor decoder |
 | `navdp` | [NavDP](https://github.com/InternRobotics/NavDP) | No verified public ONNX bundle; checkpoint access via author form | No local substitution |
 | `mbra` | [Model-Based Reannotation](https://model-base-reannotation.github.io/) | Six RGB frames, 96×96, point-goal pose | No local substitution |
 

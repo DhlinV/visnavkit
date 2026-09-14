@@ -1,8 +1,0 @@
-# @package model.modules.vision_encoder
-defaults:
-  - base
-  - _self_
-_target_: visnavkit.models.spatial_encoders.vision_encoders.cnn_efficientnet.EfficientNetEncoder
-backbone_name: efficientnet_b0
-out_indices: [2, 3, 4]
-act_layer: null

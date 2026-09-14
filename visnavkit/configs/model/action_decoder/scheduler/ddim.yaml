@@ -1,0 +1,9 @@
+_target_: visnavkit.models.action.schedulers.ddim.DDIMScheduler
+train_timesteps: 100
+beta_schedule: squaredcos_cap_v2  # cosine (step-count independent) | linear (DDPM; needs ~1000 steps)
+beta_start: 1.0e-4
+beta_end: 0.02
+# Clamp of the predicted clean sample, in normalized action units (diffusers clips at 1.0 for
+# [-1, 1] data). It bounds the 1/sqrt(alpha_bar) term near t=1; raise it or set null when the
+# actions are unnormalized metres, or it truncates long plans. null disables clipping.
+clip_sample: 4.0

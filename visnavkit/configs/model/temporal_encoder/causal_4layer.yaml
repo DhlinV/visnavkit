@@ -1,0 +1,4 @@
+defaults:
+  - causal
+  - _self_
+num_layers: 4

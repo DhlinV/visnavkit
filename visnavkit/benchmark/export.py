@@ -12,9 +12,8 @@ from omegaconf import OmegaConf
 from torch import nn
 from torch.utils.flop_counter import FlopCounterMode
 
-from visnavkit.models.action_decoders.diffusion import DiffusionPlanHead
-from visnavkit.models.action_decoders.outputs import parse_plan_output
-from visnavkit.models.compatibility import normalize_model_config
+from visnavkit.models.action.outputs import parse_plan_output
+from visnavkit.models.lit_model import disable_pretrained_downloads
 from visnavkit.utils.common import build_idxs
 
 
@@ -33,14 +32,17 @@ def target_times(cfg):
     return build_idxs(float(cfg.plan_len_seconds), count)
 
 
+def architecture_config(model_cfg):
+    """Resolved model config without initialization-only fields, for checkpoint/recipe comparison."""
+    model_cfg = disable_pretrained_downloads(copy.deepcopy(model_cfg))
+    return OmegaConf.to_container(model_cfg, resolve=True)
+
+
 def load_native_model(cfg, checkpoint=None):
     cfg = copy.deepcopy(cfg)
     if checkpoint is not None:
         # Loading a complete checkpoint must not fetch backbone initialization weights.
-        cfg.model.modules.vision_encoder.pretrained = False
-        for component in (cfg.model.modules.vision_encoder, cfg.model.modules.action_decoder.plan_head):
-            if "weights" in component:
-                component.weights = None
+        disable_pretrained_downloads(cfg.model)
     model = instantiate(cfg.model)
     if checkpoint is not None:
         loaded = torch.load(checkpoint, map_location="cpu", weights_only=False)
@@ -52,32 +54,34 @@ def load_native_model(cfg, checkpoint=None):
 
 
 class SequencePolicy(nn.Module):
-    """One decision per independent history window; no hidden feature cache."""
+    """One decision per independent history window; no hidden feature cache.
+
+    Goal-conditioned recipes run with their learned null goal token (goal-free inference, as
+    in NoMaD exploration); the metadata labels this ``null_goal_token``.
+    """
 
     def __init__(self, model):
         super().__init__()
-        if model.route_encoder is not None:
-            raise ValueError(
-                "Native benchmark export currently requires a goal-free recipe; use explicit external feeds."
-            )
         self.model = model
-        self.plan_head = model.action_decoder.plan_head
+        self.decoder = model.action_decoder
+
+    @property
+    def conditioning(self) -> str:
+        return "goal_free" if self.model.goal_encoder.num_tokens == 0 else "null_goal_token"
 
     def forward(self, frames, initial_noise=None):
-        batch, history, channels, height, width = frames.shape
-        vision = self.model.vision_encoder(frames.reshape(batch * history, channels, height, width))
-        features = vision["feat_out"].reshape(batch, history, self.model.feat_size)
-        temporal = self.model.action_decoder.temporal_encoder(features)
-        if temporal.ndim == 3:
-            temporal = temporal[:, -1]
-        if isinstance(self.plan_head, DiffusionPlanHead):
-            flat = self.plan_head._sample(temporal, noise=initial_noise)
-        else:
-            flat = self.plan_head(temporal)["plans"]
-        parsed = parse_plan_output(
-            flat, num_modes=self.plan_head.num_modes, num_pts=self.plan_head.num_pts, pose_size=self.plan_head.pose_size
+        batch, history = frames.shape[:2]
+        vision = self.model.encode_frames(frames)
+        tokens = vision.tokens.reshape(batch, history, self.model.num_tokens, self.model.feat_size)
+        context = self.model.temporal_encoder(tokens)[:, -1]
+        goal_tokens = (
+            None if self.model.goal_encoder.num_tokens == 0 else self.model.goal_encoder(None, batch_size=batch)
         )
-        speed = vision["pose"].reshape(batch, history, -1)[:, -1]
+        flat = self.decoder(context, goal_tokens, initial_noise).plans
+        parsed = parse_plan_output(
+            flat, num_modes=self.decoder.num_modes, num_pts=self.decoder.num_pts, pose_size=self.decoder.pose_size
+        )
+        speed = vision.pose.reshape(batch, history, -1)[:, -1]
         return parsed["plans"], parsed["confs"], speed
 
 
@@ -96,9 +100,7 @@ def export_native(cfg, output, *, checkpoint=None, seed=42, batch_size=1, model_
         saved_cfg = stored.get("hyper_parameters", {}).get("cfg")
         if saved_cfg is not None:
             saved_cfg = OmegaConf.create(saved_cfg) if isinstance(saved_cfg, dict) else saved_cfg
-            requested = normalize_model_config(cfg.model)
-            restored = normalize_model_config(saved_cfg.model)
-            if requested != restored:
+            if architecture_config(cfg.model) != architecture_config(saved_cfg.model):
                 raise ValueError(
                     "Checkpoint model config differs from the requested recipe. Compose its original model/config to avoid mislabeled benchmarks."
                 )
@@ -109,17 +111,15 @@ def export_native(cfg, output, *, checkpoint=None, seed=42, batch_size=1, model_
     parameters_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     size = cfg.common
     h, w = int(size.crop_wh[1] // size.downscale_factor), int(size.crop_wh[0] // size.downscale_factor)
-    prepare_vision = getattr(model.vision_encoder, "prepare_for_export", None)
-    if prepare_vision is not None:
-        model.vision_encoder = prepare_vision((h, w))
+    model.vision_encoder = model.vision_encoder.prepare_for_export((h, w))
     wrapper = SequencePolicy(model).eval()
-    frames = torch.rand(batch_size, int(size.seq_length), int(cfg.model.modules.vision_encoder.in_chans), h, w)
-    head = model.action_decoder.plan_head
-    is_diffusion = isinstance(head, DiffusionPlanHead)
+    frames = torch.rand(batch_size, int(size.seq_length), 6, h, w)
+    head = model.action_decoder
+    is_diffusion = head.uses_noise
     inputs = (frames,)
     names = ["frames"]
     if is_diffusion:
-        inputs += (torch.randn(batch_size * head.num_modes, head.traj_dim),)
+        inputs += (head.example_noise(batch_size),)
         names += ["initial_noise"]
     fastpath = torch.backends.mha.get_fastpath_enabled()
     torch.backends.mha.set_fastpath_enabled(False)
@@ -159,7 +159,7 @@ def export_native(cfg, output, *, checkpoint=None, seed=42, batch_size=1, model_
         "checkpoint_sha256": sha256_file(checkpoint_path) if has_checkpoint else None,
         "onnx_sha256": sha256_file(output),
         "inference_mode": "full_context",
-        "conditioning": "goal_free",
+        "conditioning": wrapper.conditioning,
         "precision": "float32",
         "input_shapes": {name: list(value.shape) for name, value in feeds.items()},
         "target_times_s": target_times(cfg).tolist(),
@@ -167,6 +167,7 @@ def export_native(cfg, output, *, checkpoint=None, seed=42, batch_size=1, model_
         "selection": "unranked_samples" if is_diffusion else "highest_score",
         "num_candidates": head.num_modes,
         "denoising_steps": head.sample_steps if is_diffusion else 0,
+        "action_space": head.action_space.kind,
         "parameters_total": parameters_total,
         "parameters_trainable": parameters_trainable,
         "parameter_scope": "source model, including auxiliary heads; not inferred from ONNX constants",

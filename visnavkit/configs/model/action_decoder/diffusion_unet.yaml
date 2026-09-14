@@ -1,0 +1,4 @@
+defaults:
+  - generative
+  - override denoiser: unet
+  - _self_

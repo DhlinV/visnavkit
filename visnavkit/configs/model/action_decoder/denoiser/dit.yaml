@@ -1,0 +1,7 @@
+_target_: visnavkit.models.action.denoisers.dit.DiTDenoiser
+_partial_: true
+hidden: 256
+depth: 4
+num_heads: 4
+time_dim: 128
+dropout: 0.0

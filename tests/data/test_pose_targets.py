@@ -94,3 +94,22 @@ def test_epoch_timestamp_endpoint_rounding():
 def test_invalid_target_times_rejected(anchors):
     with pytest.raises(ValueError, match="t_anchors"):
         targets(episode(np.arange(5.0)), anchors=anchors)
+
+
+def test_goal_frame_sampling_is_deterministic_and_bounded():
+    from visnavkit.data.pose_targets import goal_point_targets, sample_goal_frame
+
+    times = np.arange(0, 30, 0.5)
+    first = sample_goal_frame(times, 10, (3.0, 10.0), "clip:10")
+    assert first == sample_goal_frame(times, 10, (3.0, 10.0), "clip:10")
+    assert 3.0 <= times[first] - times[10] <= 10.0
+    assert sample_goal_frame(times, 55, (3.0, 10.0), "clip:55") == 59  # falls back to the final frame
+    with pytest.raises(ValueError, match="goal_horizon_s"):
+        sample_goal_frame(times, 0, (5.0, 1.0), "clip")
+    positions = np.column_stack([times, np.zeros_like(times), np.zeros_like(times)])
+    orientations = np.tile([1.0, 0.0, 0.0, 0.0], (len(times), 1))
+    goal = goal_point_targets(positions, orientations, [10, 12], 20)
+    np.testing.assert_allclose(goal, [[5.0, 1.0, 0.0], [4.0, 1.0, 0.0]])
+    # yaw 90 degrees: a goal straight ahead in odometry is to the right in the ego frame
+    turned = np.tile([np.cos(np.pi / 4), 0.0, 0.0, np.sin(np.pi / 4)], (len(times), 1))
+    np.testing.assert_allclose(goal_point_targets(positions, turned, [10], 20), [[5.0, 0.0, -1.0]], atol=1e-6)

@@ -1,0 +1,11 @@
+# One denoised residual per anchor; confidences from an anchor classifier (DiffusionDrive-style).
+defaults:
+  - diffusion_dit
+  - _self_
+sample_steps: 4
+anchors:
+  _target_: visnavkit.models.action.anchors.AnchorSet
+  num_anchors: 16
+  anchors_path: null
+  max_curvature: 0.5
+  speeds: [0.5, 1.0, 1.5]

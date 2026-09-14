@@ -1,5 +1,6 @@
-"""Navigation model composition; components live in their respective families."""
+"""Navigation policy composition; stages live in ``vision``, ``temporal``, ``goal`` and ``action``."""
 
-from .e2e_model import E2EModel
+from .outputs import PlanOutput, PolicyOutput, VisionOutput
+from .policy import NavigationPolicy
 
-__all__ = ["E2EModel"]
+__all__ = ["NavigationPolicy", "PlanOutput", "PolicyOutput", "VisionOutput"]

@@ -1,0 +1,5 @@
+defaults:
+  - cnn
+  - _self_
+backbone_name: efficientnet_b0
+out_indices: [2, 3, 4]

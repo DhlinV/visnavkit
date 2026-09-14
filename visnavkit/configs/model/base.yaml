@@ -1,4 +1,12 @@
-_target_: visnavkit.models.e2e_model.E2EModel
+# Default recipe: FastViT-T8 pair encoder -> causal transformer -> goal-free -> MHP decoder.
+defaults:
+  - vision_encoder: fastvit_t8
+  - temporal_encoder: causal
+  - goal_encoder: none
+  - action_decoder: mhp
+  - _self_
+
+_target_: visnavkit.models.policy.NavigationPolicy
 feat_size: 256
 
 export_cfg:

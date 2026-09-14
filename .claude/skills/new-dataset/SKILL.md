@@ -12,14 +12,16 @@ Do not invent a new format — produce this one.
 Each clip is a directory containing:
 | file | content |
 |---|---|
-| `<video>.mp4` | h264, frames at NOMINAL_FPS=20, already at target downscale |
+| `<video>.mp4` | h264, any frame rate (targets are interpolated at relative times), already at target downscale |
 | `frame_times.npy` | int64 ns timestamps, one per frame |
 | `frame_positions.npy` | (N, 3) odom xyz |
 | `frame_orientations.npy` | (N, 4) quaternion (w, x, y, z) |
 | `frame_speeds.npy` | (N,) m/s |
 
-Target loading is `strict`: every sampled frame needs `num_pts = plan_len_seconds * 20`
-future frames on disk. Cap file_list `end` accordingly or the pose loader raises.
+Optional sidecars: `route_images.npy` (N, h, w, 3) uint8 for `goal_type=route_image`,
+`instruction_embedding.npy` (E,) float for `goal_type=instruction`. Point and image goals
+need nothing extra (sampled from the clip's future via `common.goal_horizon_s`).
+Windows without `plan_len_seconds` of future poses are dropped automatically at index time.
 
 ## file_list format
 One line per clip: `path label start end` — labels contiguous from 0, `end` exclusive,

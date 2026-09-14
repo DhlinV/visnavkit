@@ -1,6 +1,10 @@
-# S2E-style recipe (arXiv:2507.22028): ViT foundation encoder (frozen DINOv3) with a
-# multi-hypothesis plan head. The paper's RL post-training stage is out of scope here —
-# this covers the imitation-learning backbone/head only.
+# S2E-style (arXiv:2507.22028): frozen DINOv3 ViT encoder, point goal (distance, cos, sin) with
+# goal dropout, multi-hypothesis decoder. The paper's RL post-training stage is out of scope.
 defaults:
-  - dinov3
+  - base
+  - override vision_encoder: dinov3_s
+  - override goal_encoder: point
   - _self_
+
+goal_encoder:
+  p_drop: 0.5

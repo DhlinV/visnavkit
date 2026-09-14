@@ -1,0 +1,8 @@
+# Any timm vision transformer (forward_features): CLS/pooled global token + patch grid.
+defaults:
+  - base
+  - _self_
+_target_: visnavkit.models.vision.timm_vit.TimmViTEncoder
+backbone_name: vit_small_patch16_224
+pair_mode: late
+freeze_backbone: true

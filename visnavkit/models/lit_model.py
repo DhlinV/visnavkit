@@ -37,9 +37,21 @@ def build_targets(batch, action_reduction="none"):
     if "target_times_s" in batch:
         times = batch["target_times_s"]
         targets["action"]["target_times_s"] = (
-            times if times.ndim == 1 or action_reduction != "none" else times.repeat_interleave(future_poses.shape[1], dim=0)
+            times
+            if times.ndim == 1 or action_reduction != "none"
+            else times.repeat_interleave(future_poses.shape[1], dim=0)
         )
     return targets
+
+
+def disable_pretrained_downloads(model_cfg: DictConfig) -> DictConfig:
+    """Complete checkpoints carry every weight; skip backbone downloads and initialization files."""
+    for component in (model_cfg.vision_encoder, model_cfg.goal_encoder):
+        if "pretrained" in component:
+            component.pretrained = False
+        if "weights" in component:
+            component.weights = None
+    return model_cfg
 
 
 def load_pretrained_model_weights(model: torch.nn.Module, pretrained_cfg: DictConfig) -> None:
@@ -98,11 +110,7 @@ class LitModel(L.LightningModule):
         self.save_hyperparameters({"cfg": cfg})
         model_cfg = copy.deepcopy(cfg.model)
         if not initialize_pretrained:
-            model_cfg.modules.vision_encoder.pretrained = False
-            if "weights" in model_cfg.modules.vision_encoder:
-                model_cfg.modules.vision_encoder.weights = None
-            if "weights" in model_cfg.modules.action_decoder.plan_head:
-                model_cfg.modules.action_decoder.plan_head.weights = None
+            disable_pretrained_downloads(model_cfg)
         self.model = instantiate(model_cfg)
         if initialize_pretrained and (pretrained_cfg := cfg.get("pretrained")):
             load_pretrained_model_weights(self.model, pretrained_cfg)
@@ -116,6 +124,7 @@ class LitModel(L.LightningModule):
         # Complete checkpoints contain their own weights; backbone initialization
         # must not trigger downloads or depend on a previous initialization file.
         kwargs["initialize_pretrained"] = False
+        kwargs.setdefault("weights_only", False)  # checkpoints store the OmegaConf config
         return super().load_from_checkpoint(checkpoint_path, *args, **kwargs)
 
     def _step(self, batch, batch_idx, stage: str):
@@ -126,15 +135,15 @@ class LitModel(L.LightningModule):
         x = x.to(self.device, non_blocking=True)
         batch_size, seq_len = x.shape[:2]
         effective_batch_size = batch_size * seq_len
-        reduction = self.model.action_decoder.temporal_encoder.reduction
+        reduction = self.model.temporal_encoder.reduction
         targets = build_targets(batch, action_reduction=reduction)
         if reduction != "none":
             effective_batch_size = batch_size
-        route_patch = batch.get("route_patch")
-        if route_patch is not None:
-            route_patch = route_patch.to(self.device, non_blocking=True)
+        goal = batch.get("goal")
+        if goal is not None:
+            goal = goal.to(self.device, non_blocking=True)
 
-        y_hat = self.model(x, route_patch=route_patch)
+        y_hat = self.model(x, goal=goal)
 
         loss_dict, loss_debug = self.model.get_losses(y_hat, targets)
 
@@ -168,8 +177,7 @@ class LitModel(L.LightningModule):
     def validation_step(self, batch, batch_idx):
         y_hat, targets, loss_debug, x, effective_batch_size = self._step(batch, batch_idx, stage="val")
 
-        plan_head = self.model.action_decoder.plan_head
-        planner_preds = plan_head.parse_output(y_hat["action"]["plan"]["plans"])
+        planner_preds = self.model.action_decoder.parse_output(y_hat.plan.plans)
         compute_and_log_metrics(
             self,
             planner_preds,

@@ -1,0 +1,13 @@
+defaults:
+  - base
+  - _self_
+_target_: visnavkit.models.action.anchor.AnchorDecoder
+hidden: 256
+loss: l1
+loss_cls_alpha: 1
+anchors:
+  _target_: visnavkit.models.action.anchors.AnchorSet
+  num_anchors: 16
+  anchors_path: null  # NPZ key "anchors" (K, T, pose_size); default: constant-curvature arc fan
+  max_curvature: 0.5
+  speeds: [0.5, 1.0, 1.5]

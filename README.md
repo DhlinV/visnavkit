@@ -2,147 +2,147 @@
   <img src="docs/assets/logo-options/d-arrow.png" alt="" width="64" align="absmiddle"> VisNavKit
 </h1>
 
-**Train, export, and benchmark visual navigation policies.**
+**A composable toolkit for visual navigation policies: train, export to ONNX, benchmark.**
 
-VisNavKit combines vision encoders, temporal encoders, and policy heads through
-Hydra configuration. Train on video and ego poses, export policies to ONNX, and
-measure inference latency and open-loop trajectory error.
+Every policy is the same four-stage pipeline. Each stage is a Hydra group, and every
+stage exchanges tokens of one width, so any encoder works with any goal and any decoder.
 
-[Architecture](docs/architecture.md) · [Benchmark guide](docs/benchmark.md) · [Model catalog](docs/models.md) · [Configurations](visnavkit/configs/)
-
-## Quick start
-
-From a local checkout, install dependencies with `uv`:
-
-```bash
-uv sync
+```text
+video frames ──▶ vision encoder ──▶ temporal encoder ──▶ action decoder ──▶ trajectory
+ (B, F, 6, H, W)   tokens (F, K, D)    context (K, D)   ▲     plans (M, T, pose)
+                                                        │
+                                          goal encoder ─┘  goal tokens (G, D), optional
 ```
 
-Run a small benchmark with generated data and random weights—no dataset or
-pretrained weights required:
+[Architecture](docs/architecture.md) · [Benchmark guide](docs/benchmark.md) · [Model catalog](docs/models.md) · [Configs](visnavkit/configs/)
+
+## Install
 
 ```bash
-uv run visnavkit-benchmark command=smoke model=gnm \
-  'common.crop_wh=[32,32]' common.downscale_factor=1 common.seq_length=2 \
-  samples=2 runtime.warmup=1 runtime.iterations=2 output_dir=outputs/benchmark/smoke
+uv sync                      # CPU ONNX Runtime included; Linux resolves CUDA 13 torch wheels
+uv sync --extra export       # + onnxslim for deployment graphs
+uv sync --extra dali         # + NVIDIA DALI GPU video decoding (Linux)
 ```
 
-This checks PyTorch/ONNX numerical parity, measures CPU inference, and scores
-synthetic trajectories. Results are saved under `outputs/benchmark/smoke/`,
-including `result.json`, `results.csv`, the ONNX model, and predictions.
-**This is a pipeline check; measuring policy quality requires trained weights
-and a real evaluation split.** See the [benchmark guide](docs/benchmark.md) for
-dataset preparation, profiling, and evaluation.
+The torch data loader decodes video with TorchCodec and needs **FFmpeg** on the system
+(`apt install ffmpeg`). Python 3.10+.
 
-## Train and export
-
-Prepare `train.txt` and `val.txt` manifests with rows of `video_path label start end`,
-plus the videos and pose arrays described in the
-[data format](docs/benchmark.md#prepare-and-evaluate-real-data). Set
-`common.data_root` to your dataset directory. The torch loader uses CPU video
-decoding and requires FFmpeg; TorchCodec is included in the dependencies.
+## Quick start (no data, no downloads)
 
 ```bash
-uv run visnavkit-train dataset=torch model=base experiment=baseline \
-  common.data_root=/data/nav_clips
+uv run visnavkit-sanity-check model=s2e model/action_decoder=flow_dit
 ```
 
-Select a model with `model=<recipe>`. Keep experiment-specific overrides in
-[`visnavkit/configs/experiment/`](visnavkit/configs/experiment/) and select them
-with `experiment=<name>`.
-
-Export a trained checkpoint for deployment:
+This prints the composed pipeline with tensor shapes, runs a training step, and checks
+that the deployment feature-buffer path reproduces the full-window prediction. Add
+`--onnx` to export the deployment graph and verify ONNX Runtime parity. The open-loop
+benchmark has an equivalent self-contained check:
 
 ```bash
-uv sync --extra export
-uv run visnavkit-export checkpoint=/path/to/model.ckpt output=outputs/policy.onnx
+uv run visnavkit-benchmark command=smoke model=gnm 'common.crop_wh=[32,32]' \
+  common.downscale_factor=1 common.seq_length=2 samples=2 output_dir=outputs/benchmark/smoke
 ```
 
-Deployment export uses a feature buffer to reuse past frame features. For
-full-window inference measurements, use the
-[benchmark exporter](docs/benchmark.md#native-export-and-profiling).
+## Compose a policy
 
-<details>
-<summary>Optional: GPU video decoding with DALI</summary>
+Pick one entry per group, or start from a recipe and override any group.
 
-On an NVIDIA GPU, install DALI and use `dataset=dali` when training. Both loaders
-share the same manifests and target format.
+| Group | Choices |
+| --- | --- |
+| `model/vision_encoder` | `cnn` or `vit` with any timm backbone, plus presets: `fastvit_t8`, `fastvit_t12`, `resnet18`, `resnet50`, `efficientnet_b0`, `mobilenetv2`, `mobilenetv3`, `mobilenetv4`, `convnext_tiny`, `convnextv2_nano`, `regnety_008`, `repvit_m1`, `efficientvit_b0`, `dinov2_s`, `dinov2_b`, `dinov3_s`, `dinov3_b`, `vit_s`, `deit_s`, `eva02_s`, `siglip_b`, `clip_b` |
+| `model/temporal_encoder` | `identity` (single frame), `causal`, `causal_4layer`, `bidirectional` |
+| `model/goal_encoder` | `none`, `point` (distance, cos, sin), `image`, `route_image`, `instruction` (text embedding) |
+| `model/action_decoder` | `regression`, `mhp`, `anchor`, `diffusion_mlp`, `diffusion_dit`, `diffusion_unet`, `flow_mlp`, `flow_dit`, `flow_unet`, `anchor_diffusion_dit`, `anchor_flow_dit` |
+
+Two more knobs cut across the groups:
+
+- **Tokens per frame**: `model.vision_encoder.token_mode=global|patch|fused` with
+  `patch_grid=[4,4]`. Global is one token per frame; patch and fused keep a pooled
+  spatial grid for the temporal encoder and decoder to attend over.
+- **Action space**: `model.action_decoder.action_space.kind=waypoint|velocity`
+  (ego-frame poses, or unicycle speed and yaw rate integrated back to poses), and
+  `model.action_decoder.normalizer.mode=none|meanstd|minmax` with `stats_path` for
+  normalized targets.
 
 ```bash
-uv sync --extra dali
-uv run visnavkit-benchmark-data --batches 50 common.data_root=/data/nav_clips
+uv run visnavkit-train dataset=torch model=vint \
+  model/vision_encoder=dinov3_s model/goal_encoder=point model/action_decoder=flow_dit \
+  model.vision_encoder.token_mode=fused common.data_root=/data/nav_clips
 ```
 
-To benchmark only the torch loader, add `--datasets torch` before `--batches`;
-the DALI extra is then unnecessary.
+Generative decoders are a denoiser (`mlp`, `dit`, `unet`) times a scheduler (`ddim`,
+`flow`), optionally seeded from a set of anchor trajectories; the named entries above are
+just those combinations. The scheduler knobs follow their reference implementations, for
+example `model.action_decoder.scheduler.time_sampling=beta` (openpi pi0) or `.shift=3`
+(diffusers SD3/Flux) for flow matching. Every decoder emits the same flat `[mean, log_scale, confidence]`
+layout per mode, so metrics, export, and the benchmark never change.
 
-</details>
+### Recipes
 
-## Model recipes
+Recipes named after papers are architecture adaptations to this repo's data contract
+(frame pairs, fixed-horizon x/y/v targets, goals sampled from the episode's own future),
+not reproductions or checkpoint-compatible replacements.
 
-[Local recipes](visnavkit/configs/model/) share a goal-free, fixed-horizon data
-format. Recipes named after research models are architecture adaptations, not
-paper reproductions or compatible replacements for the original checkpoints.
-The [model catalog](docs/models.md) tracks published ONNX bundles separately,
-including validation still needed before comparing policy quality.
+| Recipe | Vision | Temporal | Goal | Decoder |
+| --- | --- | --- | --- | --- |
+| `base`, `mimic` | FastViT-T8 | causal x1 | none | MHP |
+| `resnet18` | ResNet18 | single frame | none | regression |
+| `gnm` | MobileNetV2 | single frame | image (stacked with observation) | regression |
+| `vint` | EfficientNet-B0 | causal x4 | image (stacked) | regression |
+| `nomad` | EfficientNet-B0 | causal x4 | image, 50% goal dropout | diffusion U-Net |
+| `citywalker` | frozen DINOv2 ViT-S | causal x4 | point | regression |
+| `s2e` | frozen DINOv3 ViT-S | causal x1 | point, 50% goal dropout | MHP |
+| `dinov2`, `dinov3` | frozen DINO ViT-S | causal x1 | none | MHP |
+| `diffusion`, `flow_dit`, `anchor` | FastViT-T8 | causal x1 | none | diffusion MLP, flow DiT, anchor |
 
-| Recipe | Vision encoder | Temporal encoder | Policy head |
-| --- | --- | --- | --- |
-| `base`, `mimic` | FastViT-T8 | 1-layer causal transformer | MHP |
-| `resnet18` | ResNet18 | None | Waypoint regression |
-| `gnm` | MobileNetV2 | None | Waypoint regression |
-| `vint` | EfficientNet-B0 | 4-layer transformer | Waypoint regression |
-| `nomad` | EfficientNet-B0 | 4-layer transformer | Diffusion |
-| `citywalker` | Frozen DINOv2 ViT-S | 4-layer transformer | Waypoint regression |
-| `dinov2` | Frozen DINOv2 ViT-S | 1-layer causal transformer | MHP |
-| `dinov3`, `s2e` | Frozen DINOv3 ViT-S | 1-layer causal transformer | MHP |
-| `diffusion` | FastViT-T8 | 1-layer causal transformer | Diffusion |
+## Data
 
-MHP is a multi-hypothesis prediction head trained with Laplace negative
-log-likelihood.
+Each clip is a directory with `video.mp4` and NumPy sidecars: `frame_times.npy` (int64
+ns, strictly increasing), `frame_positions.npy` (N, 3) metres, `frame_orientations.npy`
+(N, 4) wxyz quaternions, `frame_speeds.npy` (N,). Manifests list `video_path label start end`
+rows. Targets are interpolated at fixed relative times, so any frame rate works. Point and
+image goals are sampled from the clip's own future; route images and instruction
+embeddings come from optional `route_images.npy` and `instruction_embedding.npy` sidecars.
+The dataset reads the goal type from the selected goal encoder. Details: [benchmark guide](docs/benchmark.md#prepare-and-evaluate-real-data).
 
-Select components independently of a recipe:
+`dataset=torch` decodes on CPU; `dataset=dali` decodes on GPU (point goals only).
+
+## Train, export, benchmark
 
 ```bash
-uv run visnavkit-train dataset=torch vision_encoder=vit_dinov2 \
-  temporal_encoder=bidirectional action_decoder=diffusion common.data_root=/data/nav_clips
+uv run visnavkit-train dataset=torch model=base common.data_root=/data/nav_clips
+uv run visnavkit-export checkpoint=logs/baseline/.../last.ckpt output=outputs/policy.onnx
+uv run visnavkit-benchmark command=export model=resnet18 output_dir=outputs/benchmark/resnet18
 ```
 
-Vision families live under `models/spatial_encoders/vision_encoders/`, temporal
-attention under `models/temporal_encoders/`, and trajectory decoders under
-`models/action_decoders/`. See the [architecture guide](docs/architecture.md) for
-component choices, tensor contracts, and checkpoint compatibility.
+Add `ema=default` to keep an exponential moving average of the weights (diffusers
+`EMAModel` schedule, as in diffusion policy and NoMaD); validation, checkpoints and
+export then use the averaged policy. Training records Git provenance (`strict_git=true`
+requires a clean tree) and keeps experiment overrides in
+[`configs/experiment/`](visnavkit/configs/experiment/). The
+deployment graph takes `input`, `feature_buffer`, and, when the recipe needs them, `goal`
+and `noise`; it returns `plan`, `pose`, `feat_out`. Explicit noise makes generative
+policies deterministic and lets export verify parity. The benchmark exporter runs the
+full window instead and outputs `trajectories`, `scores`, `speed`.
 
 ## Development
 
 ```bash
-uv run visnavkit-sanity-check
-uv run visnavkit-sanity-check --onnx vision_encoder=vit_dinov2 temporal_encoder=bidirectional action_decoder=diffusion
-uv run python -m visnavkit.scripts.smoke_forward
-uv run pytest tests/
+uv run pytest tests/ -q
+uv run ruff check visnavkit tests
+uv run python -m visnavkit.scripts.smoke_forward model=nomad
 ```
 
-The sanity check prints an ASCII model pipeline and verifies shapes, finite
-losses/gradients, and feature-buffer parity on small synthetic inputs. It uses
-random weights and needs no dataset or pretrained downloads. `--onnx` additionally
-checks ONNX Runtime parity and writes artifacts to `outputs/sanity/`.
+Layout: [`models/vision`](visnavkit/models/vision/) · [`models/temporal`](visnavkit/models/temporal/) ·
+[`models/goal`](visnavkit/models/goal/) · [`models/action`](visnavkit/models/action/) ·
+[`models/policy.py`](visnavkit/models/policy.py) · [`data/`](visnavkit/data/) ·
+[`benchmark/`](visnavkit/benchmark/) · [`evaluation/`](visnavkit/evaluation/) · [`scripts/`](visnavkit/scripts/)
 
-To use VisNavKit from another project, install it as an editable dependency:
-
-```bash
-uv add --editable /path/to/visnavkit
-```
-
-Hydra configs ship with the package as `visnavkit.configs`.
-
-Source: [data loaders](visnavkit/data/) · [models](visnavkit/models/) ·
-[benchmarks](visnavkit/benchmark/) · [metrics](visnavkit/evaluation/) ·
-[CLI scripts](visnavkit/scripts/)
+Use it from another project with `uv add --editable /path/to/visnavkit`; the configs
+ship inside the package as `visnavkit.configs`.
 
 <details>
 <summary>Research references</summary>
-
-Navigation foundation models and imitation learning:
 
 - **GNM**: A General Navigation Model to Drive Any Robot (ICRA 2023) — [arXiv:2210.03370](https://arxiv.org/abs/2210.03370), [code](https://github.com/robodhruv/drive-any-robot)
 - **ViNT**: A Foundation Model for Visual Navigation (CoRL 2023) — [arXiv:2306.14846](https://arxiv.org/abs/2306.14846), [code](https://github.com/robodhruv/visualnav-transformer)
@@ -152,10 +152,7 @@ Navigation foundation models and imitation learning:
 - **S2E**: From Seeing to Experiencing: Scaling Navigation Foundation Models with Reinforcement Learning — [arXiv:2507.22028](https://arxiv.org/abs/2507.22028), [project](https://vail-ucla.github.io/S2E/)
 - **NWM**: Navigation World Models (CVPR 2025) — [arXiv:2412.03572](https://arxiv.org/abs/2412.03572)
 - **MIMIC**: Learning Sidewalk Autopilot from Multi-Scale Imitation with Corrective Behavior Expansion (ICRA 2026) — [arXiv:2603.22527](https://arxiv.org/abs/2603.22527)
-
-Simulation and benchmarks for urban micromobility:
-
-- **MetaUrban**: An Embodied AI Simulation Platform for Urban Micromobility (ICLR 2025 Spotlight) — [code](https://github.com/metadriverse/metaurban)
-- **SidewalkBench**: Benchmarking Visual Navigation on Urban Sidewalks — [arXiv:2606.16953](https://arxiv.org/abs/2606.16953)
+- **Diffusion Policy** (RSS 2023) — [arXiv:2303.04137](https://arxiv.org/abs/2303.04137); **DiT** — [arXiv:2212.09748](https://arxiv.org/abs/2212.09748); **Flow matching** — [arXiv:2210.02747](https://arxiv.org/abs/2210.02747)
+- **MetaUrban** (ICLR 2025) — [code](https://github.com/metadriverse/metaurban); **SidewalkBench** — [arXiv:2606.16953](https://arxiv.org/abs/2606.16953)
 
 </details>
