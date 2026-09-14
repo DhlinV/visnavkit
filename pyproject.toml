@@ -3,6 +3,8 @@ name = "visnavkit"
 version = "0.1.0"
 description = "Visual navigation models, training, ONNX export, and open-loop benchmarks"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
   "numpy~=1.26",

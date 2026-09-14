@@ -159,6 +159,12 @@ class LitModel(L.LightningModule):
         modalities = {
             name: _to_device(batch[name], self.device) for name in self.model.modality_input_names if name in batch
         }
+        if missing := [name for name in self.model.modality_input_names if name not in batch]:
+            # Silently falling back to the null token would look like training, so say it once.
+            self._warned = getattr(self, "_warned", False)
+            if not self._warned:
+                logger.warning(f"Dataset provides no {missing}; those modalities fall back to their null token")
+                self._warned = True
 
         y_hat = self.model(x, goal=goal, **modalities)
 

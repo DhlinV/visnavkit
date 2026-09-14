@@ -1,12 +1,12 @@
 # FlowPilot-style (arXiv:2606.12603, CoRL 2026, He/Liu/Ma/Zhou, VAIL-UCLA): FastViT encoder over
-# the frame window with the frame-displacement auxiliary loss, point goal, and an anchored
+# the frame window with the frame-displacement auxiliary loss, the coarse GPS goal, and an anchored
 # rectified-flow decoder trained on Beta(1.5, 1) times. Read off the paper: github.com/VAIL-UCLA/
 # FlowPilot is still a placeholder, so nothing here is checked against released code. Known
 # differences: arc-fan anchors unless an NPZ k-means vocabulary is supplied, plain attention
 # pooling instead of gated cross-attention, and no human-preference alignment stage.
 defaults:
   - base
-  - override goal_encoder: point
+  - override goal_encoder: gps
   - override action_decoder: anchor_flow_dit
   - _self_
 

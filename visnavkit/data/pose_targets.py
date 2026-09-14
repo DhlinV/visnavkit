@@ -108,6 +108,15 @@ def goal_local_targets(frame_positions, frame_orientations, seq_idxs, goal_idx: 
     return np.asarray(rows, dtype=np.float32)
 
 
+def past_xy_targets(frame_positions, frame_orientations, seq_idxs) -> np.ndarray:
+    """``(S, 2)`` each observed frame's position in the newest observed frame's ego frame."""
+    seq_idxs = np.asarray(seq_idxs)
+    quat = frame_orientations[seq_idxs[-1]]
+    local_from_odom = rot_from_quat(quat / np.linalg.norm(quat)).T
+    offsets = np.asarray(frame_positions)[seq_idxs] - np.asarray(frame_positions)[seq_idxs[-1]]
+    return (offsets @ local_from_odom.T)[:, :2].astype(np.float32)
+
+
 def goal_point_targets(frame_positions, frame_orientations, seq_idxs, goal_idx: int) -> np.ndarray:
     """``(S, 3)`` point goal per observed frame: distance (m), cos and sin of the bearing."""
     local = goal_local_targets(frame_positions, frame_orientations, seq_idxs, goal_idx)

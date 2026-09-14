@@ -45,13 +45,13 @@ def _targets(cfg):
         ("vint", ("TimmCNNEncoder", "CausalTemporalEncoder", "image", "RegressionDecoder"), 4),
         ("nomad", ("TimmCNNEncoder", "CausalTemporalEncoder", "image", "GenerativeDecoder"), 4),
         ("citywalker", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "RegressionDecoder"), 4),
-        ("mbra", ("TimmCNNEncoder", "CausalTemporalEncoder", "point", "RegressionDecoder"), 4),
+        ("mbra", ("TimmCNNEncoder", "CausalTemporalEncoder", "gps", "RegressionDecoder"), 4),
         ("navdp", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "GenerativeDecoder"), 4),
         ("s2e", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "MHPDecoder"), 1),
         ("socialnav", ("TimmCNNEncoder", "CausalTemporalEncoder", "instruction", "GenerativeDecoder"), 1),
         ("internvla_n1", ("TimmViTEncoder", "CausalTemporalEncoder", "instruction", "GenerativeDecoder"), 1),
         ("mimic", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "MHPDecoder"), 1),
-        ("flowpilot", ("TimmCNNEncoder", "CausalTemporalEncoder", "point", "GenerativeDecoder"), 1),
+        ("flowpilot", ("TimmCNNEncoder", "CausalTemporalEncoder", "gps", "GenerativeDecoder"), 1),
     ],
 )
 def test_recipes_select_expected_components(recipe, expected, layers):
@@ -256,6 +256,14 @@ def test_modality_encoder_group_is_an_open_set(option, expected):
         "+model.modality_encoders.imu.in_dim=6",
     )
     assert instantiate(extra.model).modality_input_names == [*expected, "imu"]
+
+
+def test_citywalker_consumes_past_odometry():
+    """The paper conditions on past coordinates; here that is the past_xy ego feature."""
+    cfg = _compose("model=citywalker", "dataset=torch", "common.ego_features=[past_xy]")
+    assert list(cfg.model.modality_encoders) == ["ego"]
+    assert cfg.model.modality_encoders.ego.in_dim == 2
+    assert list(cfg.dataset.train_loader.ego_features) == ["past_xy"]
 
 
 def test_internvla_n1_sizes_its_denoiser_like_system_one():

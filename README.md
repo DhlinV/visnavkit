@@ -27,6 +27,24 @@ input but vision is optional and falls back to its encoder's learned null token.
 
 [Architecture](docs/architecture.md) · [Benchmark guide](docs/benchmark.md) · [Model catalog](docs/models.md) · [Configs](visnavkit/configs/)
 
+## Roadmap
+
+*Adapted* means the architecture composes, trains and exports here; *reproduced* means matching
+the paper's reported numbers, which needs the corpus and a training run.
+
+| | Progress |
+| --- | --- |
+| Architectures adapted | `██████████` 11/11 |
+| Export, ONNX parity, open-loop benchmark | `██████████` done |
+| Corpus tooling: preprocess, cache, stats, anchors, visualize | `██████████` done |
+| Dataset converters: FrodoBots-2K, RECON, SCAND, GoStanford2, SACSoN | `░░░░░░░░░░` 0/5 |
+| Reproducing GNM / ViNT / NoMaD | `░░░░░░░░░░` not started |
+| Reproducing CityWalker / MBRA / NavDP | `░░░░░░░░░░` not started |
+| Reproducing S2E / MIMIC / FlowPilot | `░░░░░░░░░░` not started |
+| Released VisNavKit checkpoints | `░░░░░░░░░░` none yet |
+| Multi-dataset training with per-corpus normalization | `█████░░░░░` statistics are per corpus; the loader is not |
+| RL post-training | `░░░░░░░░░░` planned |
+
 ## Install
 
 ```bash
@@ -110,14 +128,14 @@ reproductions or checkpoint-compatible replacements.
 | `gnm` | MobileNetV2 | single frame | image (stacked with observation) | regression |
 | `vint` | EfficientNet-B0 | causal x4 | image (stacked) | regression |
 | `nomad` | EfficientNet-B0 | causal x4 | image, 50% goal dropout | diffusion U-Net |
-| `citywalker` | DINOv2 ViT-S | causal x4 | point | regression |
-| `mbra` | EfficientNet-B0 | causal x4 | point | regression |
+| `citywalker` | DINOv2 ViT-S | causal x4 | point + past odometry | regression |
+| `mbra` | EfficientNet-B0 | causal x4 | gps | regression |
 | `navdp` | DINOv2 ViT-S | causal x4 | point | diffusion DiT |
 | `s2e` | DINOv3 ViT-S | causal x1 | point, 50% goal dropout | MHP |
 | `socialnav` | FastViT-T8 | causal x1 | instruction (VLM prior) | flow DiT |
 | `internvla_n1` | DINOv2 ViT-S | causal x1 | instruction (System 2 latent) | flow DiT (384, x12) |
 | `mimic` | FastViT-T8 | causal x1 | none | MHP |
-| `flowpilot` | FastViT-T8 + speed head | causal x1 | point | anchored flow DiT, Beta(1.5, 1) times |
+| `flowpilot` | FastViT-T8 + speed head | causal x1 | gps | anchored flow DiT, Beta(1.5, 1) times |
 
 `model=base` is the bare skeleton these inherit — the stage wiring with no paper attached.
 Anything that only reselects one group is an override, not a recipe:
@@ -151,7 +169,8 @@ goal encoder. Details: [benchmark guide](docs/benchmark.md#prepare-and-evaluate-
 
 Opt-in modality inputs:
 
-- `common.ego_features=[speed,yaw_rate]` packs those per-frame signals into `ego`; match
+- `common.ego_features=[speed,yaw_rate,past_xy]` packs those per-frame signals into `ego`
+  (`past_xy` is each observed frame's position in the newest frame, i.e. past odometry); match
   `model.modality_encoders.ego.in_dim` to its width.
 - `common.use_camera=true` reads `camera_intrinsics.npy` (3, 3) or (N, 3, 3) and
   `camera_extrinsics.npy` (4, 4) or (N, 4, 4) camera-to-ego, then shifts the principal point
@@ -166,17 +185,20 @@ Recorded sidewalk and off-road navigation datasets this format targets. Each nee
 conversion into the clip layout above; `visnavkit-dataset command=preprocess` validates the
 result. Converters are not bundled — the sources differ too much to guess at.
 
-| Corpus | Content | Source |
-| --- | --- | --- |
-| FrodoBots-2K | ~2000 h teleoperated sidewalk driving in 10+ cities; RGB, GPS, IMU, audio, control | [BitRobot/FrodoBots-2K](https://huggingface.co/datasets/BitRobot/FrodoBots-2K) |
-| RECON | Off-road exploration with goal images | [project](https://sites.google.com/view/recon-robot/dataset) |
-| SCAND | Socially compliant human-teleoperated navigation | [project](https://www.cs.utexas.edu/~xiao/SCAND/SCAND.html#Links) |
-| GoStanford2 | Indoor trajectories, the ViNT-modified release | [download](https://drive.google.com/drive/folders/1RYseCpbtHEFOsmSX2uqNY_kvSxwZLVP_?usp=sharing) |
-| SACSoN / HuRoN | Indoor navigation among people | [project](https://sites.google.com/view/sacson-review/huron-dataset) |
+| Corpus | Content | Licence | Source |
+| --- | --- | --- | --- |
+| FrodoBots-2K | ~2000 h teleoperated sidewalk driving in 10+ cities; RGB, GPS, IMU, audio, control | CC BY-SA 4.0 | [BitRobot/FrodoBots-2K](https://huggingface.co/datasets/BitRobot/FrodoBots-2K) |
+| RECON | Off-road exploration with goal images | see source | [project](https://sites.google.com/view/recon-robot/dataset) |
+| SCAND | Socially compliant human-teleoperated navigation | see source | [project](https://www.cs.utexas.edu/~xiao/SCAND/SCAND.html#Links) |
+| GoStanford2 | Indoor trajectories, the ViNT-modified release | see source | [download](https://drive.google.com/drive/folders/1RYseCpbtHEFOsmSX2uqNY_kvSxwZLVP_?usp=sharing) |
+| SACSoN / HuRoN | Indoor navigation among people | see source | [project](https://sites.google.com/view/sacson-review/huron-dataset) |
 
 The last four are ViNT's public training set, listed in
-[visualnav-transformer](https://github.com/robodhruv/visualnav-transformer). Tiny bundled
-corpora live in [`assets/datasets/`](assets/) and are exercised by `tests/data/test_assets.py`.
+[visualnav-transformer](https://github.com/robodhruv/visualnav-transformer). Only FrodoBots-2K
+states a licence machine-readably; for the rest, read the terms on the source page before using
+them — each corpus keeps its own, and VisNavKit's MIT licence covers this code only, never the
+data or any third-party weights. Tiny bundled corpora live in [`assets/datasets/`](assets/) and
+are exercised by `tests/data/test_assets.py`.
 
 ## Pretrained weights
 
@@ -190,10 +212,27 @@ does load:
 | A full VisNavKit checkpoint | `pretrained.ckpt_path=/path/last.ckpt`, with `pretrained.strict=false` to take the stages that match |
 | Published navigation ONNX exports | `visnavkit-benchmark` downloads the pinned zoo — see [model catalog](docs/models.md) |
 
-Upstream releases (GNM/ViNT/NoMaD, CityWalker, S2E, MBRA, SocialNav, InternVLA-N1) publish their
-own checkpoints, linked in the references below. They are **not** loadable into these recipes:
-the recipes adapt the architectures to this repo's data contract, so the tensors do not line up.
-Treat them as references and as benchmark baselines, not as initialization.
+### Upstream checkpoints
+
+Where each paper publishes its own weights. They are **not** loadable into these recipes — the
+recipes adapt the architectures to this repo's data contract, so the tensors do not line up.
+Treat them as baselines to compare against, not as initialization, and follow each project's
+licence.
+
+| Recipe | Released weights | Variants |
+| --- | --- | --- |
+| `gnm`, `vint`, `nomad` | [visualnav-transformer](https://github.com/robodhruv/visualnav-transformer) | one checkpoint per model |
+| `citywalker` | [ai4ce/CityWalker](https://github.com/ai4ce/CityWalker) | — |
+| `mbra` | [Learning-to-Drive-Anywhere-with-MBRA](https://github.com/NHirose/Learning-to-Drive-Anywhere-with-MBRA) | LogoNav image-goal and GPS-goal |
+| `navdp` | [InternRobotics/NavDP](https://github.com/InternRobotics/NavDP) | checkpoint access by author form |
+| `s2e` | [VAIL-UCLA/S2E](https://github.com/VAIL-UCLA/S2E) | BC weights only; the RL stage is unreleased |
+| `socialnav` | [AMAP-EAI/SocialNav](https://github.com/AMAP-EAI/SocialNav) | — |
+| `internvla_n1` | [InternRobotics/InternVLA-N1](https://huggingface.co/InternRobotics/InternVLA-N1) | `-System2`, `-DualVLN`, `-Preview`, `-wo-dagger` |
+| `mimic` | [UCLA-VAIL zoo](https://huggingface.co/UCLA-VAIL/Navigation-Model-Zoo-Public) | goal-free ONNX export; training code pending |
+| `flowpilot` | [VAIL-UCLA/FlowPilot](https://github.com/VAIL-UCLA/FlowPilot) | repository is still a placeholder |
+
+The zoo exports in the last two rows are the ones `visnavkit-benchmark` downloads; see the
+[model catalog](docs/models.md) for their pinned digests and the caveats on each.
 
 ## Train, export, benchmark
 

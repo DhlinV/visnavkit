@@ -18,7 +18,9 @@ def _summary(value) -> str:
         return "[" + ", ".join(_summary(item) for item in value) + "]"
     tensor = torch.as_tensor(value)
     numeric = tensor.float()
-    return f"{tuple(tensor.shape)} {str(tensor.dtype).removeprefix('torch.')} [{numeric.min():.3f}, {numeric.max():.3f}]"
+    return (
+        f"{tuple(tensor.shape)} {str(tensor.dtype).removeprefix('torch.')} [{numeric.min():.3f}, {numeric.max():.3f}]"
+    )
 
 
 def describe_sample(sample: dict, index: int, dataset) -> str:

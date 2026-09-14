@@ -1,10 +1,15 @@
-# CityWalker-style (CVPR 2025): frozen DINOv2 frame features, 4-layer transformer over the window,
-# point-goal conditioning, deterministic waypoint regression. Differences: no past odometry
-# (add it with ego_encoder=state and common.ego_features).
+# CityWalker-style (arXiv:2411.17820): frozen DINOv2 frame features, 4-layer transformer over the
+# window, point-goal conditioning and the past odometry the paper feeds alongside it, which
+# arrives here as the `past_xy` ego feature (set common.ego_features=[past_xy] on the dataset).
 defaults:
   - base
   - override vision_encoder: dinov2_s
   - override temporal_encoder: causal_4layer
   - override goal_encoder: point
+  - override modality_encoder: ego
   - override action_decoder: regression
   - _self_
+
+modality_encoders:
+  ego:
+    in_dim: 2  # past_xy

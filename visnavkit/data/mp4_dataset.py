@@ -13,6 +13,7 @@ from visnavkit.data.pose_targets import (
     get_future_poses,
     goal_local_targets,
     goal_point_targets,
+    past_xy_targets,
     load_pose_arrays,
     sample_goal_frame,
     target_safe_frame_ranges,
@@ -21,7 +22,7 @@ from visnavkit.utils.common import build_idxs, load_npy
 from visnavkit.utils.orientation import yaw_from_quat
 
 GOAL_TYPES = ("none", "point", "gps", "image", "route_image", "instruction")
-EGO_FEATURES = ("speed", "yaw_rate")
+EGO_FEATURES = {"speed": 1, "yaw_rate": 1, "past_xy": 2}  # name -> channels
 CAMERA_INTRINSICS = "camera_intrinsics.npy"
 CAMERA_EXTRINSICS = "camera_extrinsics.npy"
 
@@ -43,8 +44,9 @@ class Mp4WindowDataset(Dataset):
     frame, ``route_image`` (3, h, w) from the episode's ``route_images.npy`` (N, h, w, 3) sidecar
     indexed by the current frame, or ``instruction`` (E,) from ``instruction_embedding.npy``.
 
-    ``ego_features`` adds an ``ego`` key (S, E) with the per-frame ego status; ``speed`` reads
-    ``frame_speeds.npy`` and ``yaw_rate`` differentiates the frame orientations.
+    ``ego_features`` adds an ``ego`` key (S, E) with the per-frame ego status: ``speed`` reads
+    ``frame_speeds.npy``, ``yaw_rate`` differentiates the frame orientations, and ``past_xy``
+    gives each observed frame's position in the newest frame's ego frame (past odometry).
 
     ``use_camera`` adds ``intrinsics`` (S, 3, 3) and ``extrinsics`` (S, 4, 4) from the episode's
     ``camera_intrinsics.npy`` / ``camera_extrinsics.npy`` sidecars (either one matrix for the
@@ -94,7 +96,7 @@ class Mp4WindowDataset(Dataset):
         self.ego_features = tuple(ego_features or ())
         for name in self.ego_features:
             if name not in EGO_FEATURES:
-                raise ValueError(f"ego_features must be from {EGO_FEATURES}, got {name!r}")
+                raise ValueError(f"ego_features must be from {tuple(EGO_FEATURES)}, got {name!r}")
         self.use_camera = bool(use_camera)
         self.downscale_factor = downscale_factor
         self.goal_horizon_s = tuple(float(v) for v in goal_horizon_s)
@@ -189,7 +191,7 @@ class Mp4WindowDataset(Dataset):
         if present:
             sample["goal"] = present if self.goal_is_list else present[0]
         if self.ego_features:
-            sample["ego"] = self._ego(orientations, speeds, times_s, seq_idxs, flip)
+            sample["ego"] = self._ego(positions, orientations, speeds, times_s, seq_idxs, flip)
         if self.use_camera:
             sample["intrinsics"], sample["extrinsics"] = self._camera(sample_dir, seq_idxs, frames.shape[-1], flip)
         return sample
@@ -211,17 +213,20 @@ class Mp4WindowDataset(Dataset):
             intrinsics[:, 0, 2] = width - intrinsics[:, 0, 2]
         return torch.from_numpy(intrinsics), torch.from_numpy(extrinsics.copy())
 
-    def _ego(self, orientations, speeds, times_s, seq_idxs, flip):
+    def _ego(self, positions, orientations, speeds, times_s, seq_idxs, flip):
         """Per-frame ego status ``(S, E)``; the encoder only needs the width, not the meanings."""
         columns = []
         for name in self.ego_features:
             if name == "speed":
-                columns.append(np.asarray(speeds[seq_idxs], dtype=np.float32))
-            else:
+                columns.append(np.asarray(speeds[seq_idxs], dtype=np.float32)[:, None])
+            elif name == "yaw_rate":
                 yaw = yaw_from_quat(np.asarray(orientations))
                 rate = np.gradient(np.unwrap(yaw), np.asarray(times_s, dtype=np.float64))
-                columns.append(np.asarray(rate[seq_idxs] * (-1.0 if flip else 1.0), dtype=np.float32))
-        return torch.from_numpy(np.stack(columns, axis=-1))
+                columns.append(np.asarray(rate[seq_idxs], dtype=np.float32)[:, None] * (-1.0 if flip else 1.0))
+            else:
+                past = past_xy_targets(positions, orientations, seq_idxs)
+                columns.append(past * ([1.0, -1.0] if flip else [1.0, 1.0]))
+        return torch.from_numpy(np.concatenate(columns, axis=-1).astype(np.float32))
 
     def _flip_goal(self, kind, goal):
         if goal is None:
