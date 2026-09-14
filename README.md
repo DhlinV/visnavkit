@@ -171,7 +171,7 @@ ship inside the package as `visnavkit.configs`.
 - **ViKiNG**: Vision-Based Kilometer-Scale Navigation with Geographic Hints (RSS 2022) — [arXiv:2202.11271](https://arxiv.org/abs/2202.11271)
 - **CityWalker**: Learning Embodied Urban Navigation from Web-Scale Videos (CVPR 2025) — [code](https://github.com/ai4ce/CityWalker)
 - **S2E**: From Seeing to Experiencing: Scaling Navigation Foundation Models with Reinforcement Learning — [arXiv:2507.22028](https://arxiv.org/abs/2507.22028), [code](https://github.com/VAIL-UCLA/S2E)
-- **FlowPilot**: From Imitation to Alignment: Human-Preference Flow Policies for Long-Horizon Sidewalk Navigation — [arXiv:2606.12603](https://arxiv.org/abs/2606.12603), [project](https://vail.cs.ucla.edu/FlowPilot)
+- **FlowPilot**: From Imitation to Alignment: Human-Preference Flow Policies for Long-Horizon Sidewalk Navigation (CoRL 2026) — [arXiv:2606.12603](https://arxiv.org/abs/2606.12603), [project](https://vail.cs.ucla.edu/FlowPilot), [code](https://github.com/VAIL-UCLA/FlowPilot)
 - **NWM**: Navigation World Models (CVPR 2025) — [arXiv:2412.03572](https://arxiv.org/abs/2412.03572)
 - **MIMIC**: Learning Sidewalk Autopilot from Multi-Scale Imitation with Corrective Behavior Expansion (ICRA 2026) — [arXiv:2603.22527](https://arxiv.org/abs/2603.22527), [code](https://github.com/VAIL-UCLA/MIMIC)
 - **Diffusion Policy** (RSS 2023) — [arXiv:2303.04137](https://arxiv.org/abs/2303.04137); **DiT** — [arXiv:2212.09748](https://arxiv.org/abs/2212.09748); **Flow matching** — [arXiv:2210.02747](https://arxiv.org/abs/2210.02747)
