@@ -223,8 +223,9 @@ If VisNavKit helps your work, please consider citing it:
 }
 ```
 
-Please also cite the work a recipe adapts — [`CITATION.bib`](CITATION.bib) carries an entry for
-every paper below, exported from arXiv rather than transcribed.
+GitHub's *Cite this repository* button reads [`CITATION.cff`](CITATION.cff), which carries the
+same entry. Please also cite the work a recipe adapts: [`CITATION.bib`](CITATION.bib) has one
+per paper below, taken from the publisher's record or arXiv's export, never transcribed.
 
 ## Research references
 
