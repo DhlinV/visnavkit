@@ -54,6 +54,8 @@ def _targets(cfg):
         ("flow_dit", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "GenerativeDecoder"), 1),
         ("anchor", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "AnchorDecoder"), 1),
         ("flowpilot", ("TimmCNNEncoder", "CausalTemporalEncoder", "point", "GenerativeDecoder"), 1),
+        ("mbra", ("TimmCNNEncoder", "CausalTemporalEncoder", "point", "RegressionDecoder"), 4),
+        ("navdp", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "GenerativeDecoder"), 4),
     ],
 )
 def test_recipes_select_expected_components(recipe, expected, layers):

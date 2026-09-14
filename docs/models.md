@@ -47,8 +47,8 @@ files. Built-in `Artifact` URLs refer to the pinned zoo release.
 | `citywalker` | [CityWalker](https://github.com/ai4ce/CityWalker) | Five RGB frames, 350×630, past coordinates and point-goal | `citywalker` uses point-goal conditioning; omits past-odometry input |
 | `s2e` | [S2E](https://github.com/VAIL-UCLA/S2E) | BC Web100 variant; eleven RGB frames, 256×256, point-goal | `s2e` is a DINOv3 + point-goal + MHP adaptation; no RL stage |
 | `mimic` | [MIMIC, Honglin He et al.](https://github.com/VAIL-UCLA/MIMIC) | Goal-free variant; sixteen RGB frames, 288×512; fixed batch one | `mimic` equals `base`; `model/action_decoder=anchor` adds an anchor decoder |
-| `navdp` | [NavDP](https://github.com/InternRobotics/NavDP) | No verified public ONNX bundle; checkpoint access via author form | No local substitution |
-| `mbra` | [Model-Based Reannotation](https://model-base-reannotation.github.io/) | Six RGB frames, 96×96, point-goal pose | No local substitution |
+| `navdp` | [NavDP](https://github.com/InternRobotics/NavDP) | No verified public ONNX bundle; checkpoint access via author form | `navdp` is a point-goal diffusion-DiT adaptation; RGB only (the depth branch belongs in a modality encoder) and no privileged critic |
+| `mbra` | [MBRA / LogoNav](https://github.com/NHirose/Learning-to-Drive-Anywhere-with-MBRA) | Six RGB frames, 96×96, point-goal pose | `mbra` is the LogoNav architecture (EfficientNet-B0 + point goal + regression); the reannotation pipeline is a data stage |
 
 Input resolution is `(height, width)`. Native size/FLOP/timing results must carry
 `architecture_adaptation` provenance; a paper name in Hydra does not establish

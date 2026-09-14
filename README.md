@@ -99,10 +99,12 @@ reproductions or checkpoint-compatible replacements.
 | `gnm` | MobileNetV2 | single frame | image (stacked with observation) | regression |
 | `vint` | EfficientNet-B0 | causal x4 | image (stacked) | regression |
 | `nomad` | EfficientNet-B0 | causal x4 | image, 50% goal dropout | diffusion U-Net |
-| `citywalker` | frozen DINOv2 ViT-S | causal x4 | point | regression |
-| `s2e` | frozen DINOv3 ViT-S | causal x1 | point, 50% goal dropout | MHP |
-| `dinov2`, `dinov3` | frozen DINO ViT-S | causal x1 | none | MHP |
+| `citywalker` | DINOv2 ViT-S | causal x4 | point | regression |
+| `mbra` | EfficientNet-B0 | causal x4 | point | regression |
+| `navdp` | DINOv2 ViT-S | causal x4 | point | diffusion DiT |
+| `s2e` | DINOv3 ViT-S | causal x1 | point, 50% goal dropout | MHP |
 | `flowpilot` | FastViT-T8 + speed head | causal x1 | point | anchored flow DiT, Beta(1.5, 1) times |
+| `dinov2`, `dinov3` | DINO ViT-S | causal x1 | none | MHP |
 | `diffusion`, `flow_dit`, `anchor` | FastViT-T8 | causal x1 | none | diffusion MLP, flow DiT, anchor |
 
 ## Data
@@ -194,6 +196,8 @@ Navigation policies, oldest first; the last four are the recipes this repo adapt
 - **ViNT**: A Foundation Model for Visual Navigation (CoRL 2023) — [arXiv:2306.14846](https://arxiv.org/abs/2306.14846), [code](https://github.com/robodhruv/visualnav-transformer)
 - **NoMaD**: Goal Masked Diffusion Policies for Navigation and Exploration (ICRA 2024) — [arXiv:2310.07896](https://arxiv.org/abs/2310.07896), [code](https://github.com/robodhruv/visualnav-transformer)
 - **CityWalker**: Learning Embodied Urban Navigation from Web-Scale Videos (CVPR 2025) — [arXiv:2411.17820](https://arxiv.org/abs/2411.17820), [code](https://github.com/ai4ce/CityWalker)
+- **MBRA**: Learning to Drive Anywhere with Model-Based Reannotation (RA-L 2025) — [arXiv:2505.05592](https://arxiv.org/abs/2505.05592), [code](https://github.com/NHirose/Learning-to-Drive-Anywhere-with-MBRA)
+- **NavDP**: Learning Sim-to-Real Navigation Diffusion Policy with Privileged Information Guidance — [arXiv:2505.08712](https://arxiv.org/abs/2505.08712), [code](https://github.com/InternRobotics/NavDP)
 - **S2E**: From Seeing to Experiencing: Scaling Navigation Foundation Models with Reinforcement Learning (ICLR 2026) — [arXiv:2507.22028](https://arxiv.org/abs/2507.22028), [code](https://github.com/VAIL-UCLA/S2E)
 - **MIMIC**: Learning Sidewalk Autopilot from Multi-Scale Imitation with Corrective Behavior Expansion (ICRA 2026) — [arXiv:2603.22527](https://arxiv.org/abs/2603.22527), [code](https://github.com/VAIL-UCLA/MIMIC)
 - **FlowPilot**: From Imitation to Alignment: Human-Preference Flow Policies for Long-Horizon Sidewalk Navigation (CoRL 2026) — [arXiv:2606.12603](https://arxiv.org/abs/2606.12603), [code](https://github.com/VAIL-UCLA/FlowPilot), [project](https://vail.cs.ucla.edu/FlowPilot)

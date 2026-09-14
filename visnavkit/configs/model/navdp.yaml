@@ -1,0 +1,11 @@
+# NavDP-style (arXiv:2505.08712, InternRobotics): diffusion transformer policy over the frame
+# window with point-goal conditioning. Differences: RGB only — the paper's depth branch belongs
+# in a modality encoder here — a DINOv2 backbone standing in for its DepthAnything features, and
+# no privileged critic, so candidates carry uniform confidence instead of value-ranked scores.
+defaults:
+  - base
+  - override vision_encoder: dinov2_s
+  - override temporal_encoder: causal_4layer
+  - override goal_encoder: point
+  - override action_decoder: diffusion_dit
+  - _self_

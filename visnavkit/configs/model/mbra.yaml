@@ -1,0 +1,12 @@
+# MBRA-style (arXiv:2505.05592, Hirose et al.): the LogoNav policy that model-based reannotation
+# distills into — EfficientNet-B0 encoder, transformer over the observation window, local GPS
+# goal pose, deterministic waypoint regression. Differences: the reannotation pipeline that
+# produces the labels is a data stage, not architecture; the paper's image-goal variant is
+# model/goal_encoder=image.
+defaults:
+  - base
+  - override vision_encoder: efficientnet_b0
+  - override temporal_encoder: causal_4layer
+  - override goal_encoder: point
+  - override action_decoder: regression
+  - _self_

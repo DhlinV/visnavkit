@@ -33,7 +33,21 @@ def test_base_model_forward():
 
 @pytest.mark.parametrize(
     "recipe",
-    ["gnm", "vint", "nomad", "citywalker", "s2e", "mimic", "flowpilot", "dinov3", "diffusion", "flow_dit", "anchor"],
+    [
+        "gnm",
+        "vint",
+        "nomad",
+        "citywalker",
+        "mbra",
+        "navdp",
+        "s2e",
+        "mimic",
+        "flowpilot",
+        "dinov3",
+        "diffusion",
+        "flow_dit",
+        "anchor",
+    ],
 )
 def test_recipe_forward(recipe):
     cfg, model, _, y = _forward([f"model={recipe}"])
