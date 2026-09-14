@@ -63,5 +63,5 @@ Hydra groups mirror that layout under `visnavkit/configs/model/`. Full contracts
   it to the group test in `tests/models/test_model_configs.py`.
 - Tests must pass without network access or a dataset; use the synthetic fixtures in `tests/`,
   or drop a tiny corpus into `assets/datasets/` and `tests/data/test_assets.py` picks it up.
-- Every paper a recipe adapts has an entry in `CITATION.bib`; add one (arXiv's own export, not a
-  transcription) when adding a recipe.
+- Every paper a recipe adapts has an entry in `CITATION.bib`; add one (Google Scholar's BibTeX
+  export, not a transcription) when adding a recipe.

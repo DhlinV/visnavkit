@@ -1,8 +1,10 @@
 % Citations for VisNavKit and every work it adapts or builds on.
 %
-% Published papers carry the publisher's own record, resolved by DOI through Crossref; the rest
-% are preprints with no published DOI yet and carry arXiv's own export. Neither is transcribed
-% by hand. Google Scholar serves no machine-readable export, so it is not the source here.
+% Entries follow Google Scholar's BibTeX export: its key style, its field set and its sentence
+% case, with stylized names braced so the exporter's lowercasing cannot rename a paper. Where
+% Scholar ranks a preprint first but the work has a published version, the published record is
+% cited instead, with volume, number and pages resolved by DOI through Crossref. Nothing here is
+% transcribed by hand.
 
 @Misc{visnavkit2026,
   author       = {Honglin He},
@@ -14,129 +16,158 @@
 
 % ---- Navigation policies ---------------------------------------------------------
 
-@inproceedings{Shah_2022, series={RSS2022}, title={ViKiNG: Vision-Based Kilometer-Scale Navigation with Geographic Hints}, url={http://dx.doi.org/10.15607/rss.2022.xviii.019}, DOI={10.15607/rss.2022.xviii.019}, booktitle={Robotics: Science and Systems XVIII}, publisher={Robotics: Science and Systems Foundation}, author={Shah, Dhruv and Levine, Sergey}, year={2022}, month=June, collection={RSS2022} }
-
-@inproceedings{Shah_2023, title={GNM: A General Navigation Model to Drive Any Robot}, url={http://dx.doi.org/10.1109/icra48891.2023.10161227}, DOI={10.1109/icra48891.2023.10161227}, booktitle={2023 IEEE International Conference on Robotics and Automation (ICRA)}, publisher={IEEE}, author={Shah, Dhruv and Sridhar, Ajay and Bhorkar, Arjun and Hirose, Noriaki and Levine, Sergey}, year={2023}, month=May, pages={7226–7233} }
-
-@misc{shah2023vintfoundationmodelvisual,
-      title={ViNT: A Foundation Model for Visual Navigation}, 
-      author={Dhruv Shah and Ajay Sridhar and Nitish Dashora and Kyle Stachowicz and Kevin Black and Noriaki Hirose and Sergey Levine},
-      year={2023},
-      eprint={2306.14846},
-      archivePrefix={arXiv},
-      primaryClass={cs.RO},
-      url={https://arxiv.org/abs/2306.14846}, 
+@inproceedings{shah2022viking,
+  title={{ViKiNG}: Vision-based kilometer-scale navigation with geographic hints},
+  author={Shah, Dhruv and Levine, Sergey},
+  booktitle={Robotics: Science and Systems XVIII},
+  year={2022},
+  organization={Robotics: Science and Systems Foundation}
 }
 
-@inproceedings{Sridhar_2024, title={NoMaD: Goal Masked Diffusion Policies for Navigation and Exploration}, url={http://dx.doi.org/10.1109/icra57147.2024.10610665}, DOI={10.1109/icra57147.2024.10610665}, booktitle={2024 IEEE International Conference on Robotics and Automation (ICRA)}, publisher={IEEE}, author={Sridhar, Ajay and Shah, Dhruv and Glossop, Catherine and Levine, Sergey}, year={2024}, month=May, pages={63–70} }
-
-@article{Liu_2024, title={CityWalker: Learning Embodied Urban Navigation from Web-Scale Videos}, url={http://dx.doi.org/10.32388/yfv2c5}, DOI={10.32388/yfv2c5}, publisher={Qeios Ltd}, author={Liu, Xinhao and Feng, Chen}, year={2024}, month=Dec }
-
-@article{Hirose_2026, title={Learning to Drive Anywhere With Model-Based Reannotation}, volume={11}, ISSN={2377-3774}, url={http://dx.doi.org/10.1109/lra.2025.3640424}, DOI={10.1109/lra.2025.3640424}, number={2}, journal={IEEE Robotics and Automation Letters}, publisher={Institute of Electrical and Electronics Engineers (IEEE)}, author={Hirose, Noriaki and Ignatova, Lydia and Stachowicz, Kyle and Glossop, Catherine and Levine, Sergey and Shah, Dhruv}, year={2026}, month=Feb, pages={1242–1249} }
-
-@misc{cai2025navdplearningsimtorealnavigation,
-      title={NavDP: Learning Sim-to-Real Navigation Diffusion Policy with Privileged Information Guidance}, 
-      author={Wenzhe Cai and Jiaqi Peng and Yuqiang Yang and Yujian Zhang and Meng Wei and Hanqing Wang and Yilun Chen and Tai Wang and Jiangmiao Pang},
-      year={2025},
-      eprint={2505.08712},
-      archivePrefix={arXiv},
-      primaryClass={cs.RO},
-      url={https://arxiv.org/abs/2505.08712}, 
+@inproceedings{shah2023gnm,
+  title={{GNM}: A general navigation model to drive any robot},
+  author={Shah, Dhruv and Sridhar, Ajay and Bhorkar, Arjun and Hirose, Noriaki and Levine, Sergey},
+  booktitle={2023 IEEE International Conference on Robotics and Automation (ICRA)},
+  pages={7226--7233},
+  year={2023},
+  organization={IEEE}
 }
 
-@misc{he2026seeingexperiencingscalingnavigation,
-      title={From Seeing to Experiencing: Scaling Navigation Foundation Models with Reinforcement Learning}, 
-      author={Honglin He and Yukai Ma and Brad Squicciarini and Wayne Wu and Bolei Zhou},
-      year={2026},
-      eprint={2507.22028},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url={https://arxiv.org/abs/2507.22028}, 
+@inproceedings{shah2023vint,
+  title={{ViNT}: A foundation model for visual navigation},
+  author={Shah, Dhruv and Sridhar, Ajay and Dashora, Nitish and Stachowicz, Kyle and Black, Kevin and Hirose, Noriaki and Levine, Sergey},
+  booktitle={Proceedings of the 7th Conference on Robot Learning},
+  volume={229},
+  pages={711--733},
+  year={2023},
+  organization={PMLR}
 }
 
-@misc{chen2026socialnavtraininghumaninspiredfoundation,
-      title={SocialNav: Training Human-Inspired Foundation Model for Socially-Aware Embodied Navigation}, 
-      author={Ziyi Chen and Yingnan Guo and Zedong Chu and Minghua Luo and Yanfen Shen and Mingchao Sun and Junjun Hu and Shichao Xie and Kuan Yang and Pei Shi and Zhining Gu and Lu Liu and Honglin Han and Xiaolong Wu and Mu Xu and Yu Zhang and Ning Guo},
-      year={2026},
-      eprint={2511.21135},
-      archivePrefix={arXiv},
-      primaryClass={cs.RO},
-      url={https://arxiv.org/abs/2511.21135}, 
+@inproceedings{sridhar2024nomad,
+  title={{NoMaD}: Goal masked diffusion policies for navigation and exploration},
+  author={Sridhar, Ajay and Shah, Dhruv and Glossop, Catherine and Levine, Sergey},
+  booktitle={2024 IEEE International Conference on Robotics and Automation (ICRA)},
+  pages={63--70},
+  year={2024},
+  organization={IEEE}
 }
 
-@misc{wei2025groundslowfastdualsystem,
-      title={Ground Slow, Move Fast: A Dual-System Foundation Model for Generalizable Vision-and-Language Navigation}, 
-      author={Meng Wei and Chenyang Wan and Jiaqi Peng and Xiqian Yu and Yuqiang Yang and Delin Feng and Wenzhe Cai and Chenming Zhu and Tai Wang and Jiangmiao Pang and Xihui Liu},
-      year={2025},
-      eprint={2512.08186},
-      archivePrefix={arXiv},
-      primaryClass={cs.RO},
-      url={https://arxiv.org/abs/2512.08186}, 
+@inproceedings{liu2025citywalker,
+  title={{CityWalker}: Learning embodied urban navigation from web-scale videos},
+  author={Liu, Xinhao and Li, Jintong and Jiang, Yicheng and Sujay, Niranjan and Yang, Zhicheng and Zhang, Juexiao and Abanes, John and Zhang, Jing and Feng, Chen},
+  booktitle={2025 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages={6875--6885},
+  year={2025},
+  organization={IEEE}
 }
 
-@misc{he2026learningsidewalkautopilotmultiscale,
-      title={Learning Sidewalk Autopilot from Multi-Scale Imitation with Corrective Behavior Expansion}, 
-      author={Honglin He and Yukai Ma and Brad Squicciarini and Wayne Wu and Bolei Zhou},
-      year={2026},
-      eprint={2603.22527},
-      archivePrefix={arXiv},
-      primaryClass={cs.RO},
-      url={https://arxiv.org/abs/2603.22527}, 
+@article{hirose2025learning,
+  title={Learning to drive anywhere with model-based reannotation},
+  author={Hirose, Noriaki and Ignatova, Lydia and Stachowicz, Kyle and Glossop, Catherine and Levine, Sergey and Shah, Dhruv},
+  journal={IEEE Robotics and Automation Letters},
+  volume={11},
+  number={2},
+  pages={1242--1249},
+  year={2025},
+  publisher={IEEE}
 }
 
-@misc{he2026imitationalignmenthumanpreferenceflow,
-      title={From Imitation to Alignment: Human-Preference Flow Policies for Long-Horizon Sidewalk Navigation}, 
-      author={Honglin He and Zhizheng Liu and Yukai Ma and Bolei Zhou},
-      year={2026},
-      eprint={2606.12603},
-      archivePrefix={arXiv},
-      primaryClass={cs.RO},
-      url={https://arxiv.org/abs/2606.12603}, 
+@inproceedings{cai2026navdp,
+  title={{NavDP}: Learning sim-to-real navigation diffusion policy with privileged information guidance},
+  author={Cai, Wenzhe and Peng, Jiaqi and Yang, Yuqiang and Zhang, Yujian and Wei, Meng and Wang, Hanqing and Chen, Yilun and Wang, Tai and Pang, Jiangmiao},
+  booktitle={2026 IEEE International Conference on Robotics and Automation (ICRA)},
+  year={2026},
+  organization={IEEE}
+}
+
+@inproceedings{he2026seeing,
+  title={From seeing to experiencing: Scaling navigation foundation models with reinforcement learning},
+  author={He, Honglin and Ma, Yukai and Squicciarini, Brad and Wu, Wayne and Zhou, Bolei},
+  booktitle={The Fourteenth International Conference on Learning Representations},
+  year={2026}
+}
+
+@inproceedings{chen2026socialnav,
+  title={{SocialNav}: Training human-inspired foundation model for socially-aware embodied navigation},
+  author={Chen, Ziyi and Guo, Yingnan and Chu, Zedong and Luo, Minghua and Shen, Yanfen and Sun, Mingchao and Hu, Junjun and Xie, Shichao and Yang, Kuan and Shi, Pei and Gu, Zhining and Liu, Lu and Han, Honglin and Wu, Xiaolong and Xu, Mu and Zhang, Yu},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages={28796--28806},
+  year={2026}
+}
+
+@inproceedings{wei2026ground,
+  title={Ground slow, move fast: A dual-system foundation model for generalizable vision-language navigation},
+  author={Wei, Meng and Wan, Chenyang and Peng, Jiaqi and Yu, Xiqian and Yang, Yuqiang and Feng, Delin and Cai, Wenzhe and Zhu, Chenming and Wang, Tai and Pang, Jiangmiao and Liu, Xihui},
+  booktitle={The Fourteenth International Conference on Learning Representations},
+  year={2026}
+}
+
+@inproceedings{he2026learning,
+  title={Learning sidewalk autopilot from multi-scale imitation with corrective behavior expansion},
+  author={He, Honglin and Ma, Yukai and Squicciarini, Brad and Wu, Wayne and Zhou, Bolei},
+  booktitle={2026 IEEE International Conference on Robotics and Automation (ICRA)},
+  year={2026},
+  organization={IEEE}
+}
+
+@inproceedings{he2026imitation,
+  title={From imitation to alignment: Human-preference flow policies for long-horizon sidewalk navigation},
+  author={He, Honglin and Liu, Zhizheng and Ma, Yukai and Zhou, Bolei},
+  booktitle={Conference on Robot Learning},
+  year={2026},
+  organization={PMLR}
 }
 
 
 % ---- World models, generative building blocks, simulators and benchmarks ---------
 
-@misc{bar2025navigationworldmodels,
-      title={Navigation World Models}, 
-      author={Amir Bar and Gaoyue Zhou and Danny Tran and Trevor Darrell and Yann LeCun},
-      year={2025},
-      eprint={2412.03572},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url={https://arxiv.org/abs/2412.03572}, 
+@inproceedings{bar2025navigation,
+  title={Navigation world models},
+  author={Bar, Amir and Zhou, Gaoyue and Tran, Danny and Darrell, Trevor and LeCun, Yann},
+  booktitle={2025 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages={15791--15801},
+  year={2025},
+  organization={IEEE}
 }
 
-@inproceedings{Chi_2023, series={RSS2023}, title={Diffusion Policy: Visuomotor Policy Learning via Action Diffusion}, url={http://dx.doi.org/10.15607/rss.2023.xix.026}, DOI={10.15607/rss.2023.xix.026}, booktitle={Robotics: Science and Systems XIX}, publisher={Robotics: Science and Systems Foundation}, author={Chi, Cheng and Feng, Siyuan and Du, Yilun and Xu, Zhenjia and Cousineau, Eric and Burchfiel, Benjamin and Song, Shuran}, year={2023}, month=July, collection={RSS2023} }
-
-@inproceedings{Peebles_2023, title={Scalable Diffusion Models with Transformers}, url={http://dx.doi.org/10.1109/iccv51070.2023.00387}, DOI={10.1109/iccv51070.2023.00387}, booktitle={2023 IEEE/CVF International Conference on Computer Vision (ICCV)}, publisher={IEEE}, author={Peebles, William and Xie, Saining}, year={2023}, month=Oct, pages={4172–4182} }
-
-@misc{lipman2023flowmatchinggenerativemodeling,
-      title={Flow Matching for Generative Modeling}, 
-      author={Yaron Lipman and Ricky T. Q. Chen and Heli Ben-Hamu and Maximilian Nickel and Matt Le},
-      year={2023},
-      eprint={2210.02747},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2210.02747}, 
+@article{chi2025diffusion,
+  title={Diffusion policy: Visuomotor policy learning via action diffusion},
+  author={Chi, Cheng and Xu, Zhenjia and Feng, Siyuan and Cousineau, Eric and Du, Yilun and Burchfiel, Benjamin and Tedrake, Russ and Song, Shuran},
+  journal={The International Journal of Robotics Research},
+  volume={44},
+  number={10-11},
+  pages={1684--1704},
+  year={2025},
+  publisher={SAGE Publications}
 }
 
-@misc{wu2024metaurbanembodiedaisimulation,
-      title={MetaUrban: An Embodied AI Simulation Platform for Urban Micromobility}, 
-      author={Wayne Wu and Honglin He and Jack He and Yiran Wang and Chenda Duan and Zhizheng Liu and Quanyi Li and Bolei Zhou},
-      year={2024},
-      eprint={2407.08725},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV},
-      url={https://arxiv.org/abs/2407.08725}, 
+@inproceedings{peebles2023scalable,
+  title={Scalable diffusion models with transformers},
+  author={Peebles, William and Xie, Saining},
+  booktitle={2023 IEEE/CVF International Conference on Computer Vision (ICCV)},
+  pages={4172--4182},
+  year={2023},
+  organization={IEEE}
 }
 
-@misc{liu2026sidewalkbenchbenchmarkingvisualnavigation,
-      title={SidewalkBench: Benchmarking Visual Navigation on Urban Sidewalks}, 
-      author={Zhizheng Liu and Honglin He and Vivek Alumootil and Akshat Pandya and Brad Squicciarini and Wayne Wu and Bolei Zhou},
-      year={2026},
-      eprint={2606.16953},
-      archivePrefix={arXiv},
-      primaryClass={cs.RO},
-      url={https://arxiv.org/abs/2606.16953}, 
+@inproceedings{lipman2023flow,
+  title={Flow matching for generative modeling},
+  author={Lipman, Yaron and Chen, Ricky T. Q. and Ben-Hamu, Heli and Nickel, Maximilian and Le, Matt},
+  booktitle={The Eleventh International Conference on Learning Representations},
+  year={2023}
+}
+
+@inproceedings{wu2025metaurban,
+  title={{MetaUrban}: An embodied AI simulation platform for urban micromobility},
+  author={Wu, Wayne and He, Honglin and He, Jack and Wang, Yiran and Duan, Chenda and Liu, Zhizheng and Li, Quanyi and Zhou, Bolei},
+  booktitle={The Thirteenth International Conference on Learning Representations},
+  year={2025}
+}
+
+@inproceedings{liu2026sidewalkbench,
+  title={{SidewalkBench}: Benchmarking visual navigation on urban sidewalks},
+  author={Liu, Zhizheng and He, Honglin and Alumootil, Vivek and Pandya, Akshat and Squicciarini, Brad and Wu, Wayne and Zhou, Bolei},
+  booktitle={Conference on Robot Learning},
+  year={2026},
+  organization={PMLR}
 }

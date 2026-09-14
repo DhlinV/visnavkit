@@ -118,16 +118,16 @@ reproductions or checkpoint-compatible replacements.
 | Recipe | Vision | Temporal | Goal | Decoder |
 | --- | --- | --- | --- | --- |
 | `gnm` | MobileNetV2 | single frame | image (stacked with observation) | regression |
-| `vint` | EfficientNet-B0 | causal x4 | image (stacked) | regression |
-| `nomad` | EfficientNet-B0 | causal x4 | image, 50% goal dropout | diffusion U-Net |
-| `citywalker` | DINOv2 ViT-S | causal x4 | point + past odometry | regression |
-| `mbra` | EfficientNet-B0 | causal x4 | gps | regression |
-| `navdp` | DINOv2 ViT-S | causal x4 | point | diffusion DiT |
-| `s2e` | DINOv3 ViT-S | causal x1 | point, 50% goal dropout | MHP |
-| `socialnav` | FastViT-T8 | causal x1 | instruction (VLM prior) | flow DiT |
-| `internvla_n1` | DINOv2 ViT-S | causal x1 | instruction (System 2 latent) | flow DiT (384, x12) |
-| `mimic` | FastViT-T8 | causal x1 | none | MHP |
-| `flowpilot` | FastViT-T8 + speed head | causal x1 | gps | anchored flow DiT, Beta(1.5, 1) times |
+| `vint` | EfficientNet-B0 | causal x4, 512-d, 4 heads | image (stacked) | regression |
+| `nomad` | EfficientNet-B0 | causal x4, 256-d | image, 50% goal dropout | diffusion U-Net, 10 steps, 8 candidates |
+| `citywalker` | DINOv2 ViT-B (frozen) | causal x16, 768-d | point + past odometry | regression |
+| `mbra` | EfficientNet-B0 | causal x4, 1024-d, 4 heads | gps | regression |
+| `navdp` | DINOv2 ViT-S | causal x2, 384-d | point | diffusion DiT (384, x16), 10 steps, 16 candidates |
+| `s2e` | EfficientNet-B0 | causal x4, 768-d | point, 50% goal dropout | anchor, 8 anchors |
+| `socialnav` | FastViT-T8 | causal x1 | instruction (VLM prior) | flow DiT (1536, x12), 5 steps |
+| `internvla_n1` | DINOv2 ViT-S | causal x1 | instruction (System 2 latent, 4 tokens) | flow DiT (384, x12), 10 steps |
+| `mimic` | DINOv3 ViT-S | causal x4, 512-d | point + camera token | anchor, 64 anchors |
+| `flowpilot` | FastViT-MA36 + speed head | causal x1, 1280-d | gps, 90% goal dropout | anchored flow DiT, 64 anchors, Beta(1.5, 1) times |
 
 `model=base` is the bare skeleton these inherit — the stage wiring with no paper attached.
 Anything that only reselects one group is an override, not a recipe:
@@ -212,6 +212,29 @@ The following repositories greatly inspire VisNavKit:
 
 Thanks to the maintainers of these projects for their contribution to the community!
 
+## Research references
+
+Navigation policies, oldest first. Every one but ViKiNG has a recipe in the table above.
+
+- **ViKiNG**: Vision-Based Kilometer-Scale Navigation with Geographic Hints (RSS 2022) — [arXiv:2202.11271](https://arxiv.org/abs/2202.11271)
+- **GNM**: A General Navigation Model to Drive Any Robot (ICRA 2023) — [arXiv:2210.03370](https://arxiv.org/abs/2210.03370), [code](https://github.com/robodhruv/drive-any-robot)
+- **ViNT**: A Foundation Model for Visual Navigation (CoRL 2023) — [arXiv:2306.14846](https://arxiv.org/abs/2306.14846), [code](https://github.com/robodhruv/visualnav-transformer)
+- **NoMaD**: Goal Masked Diffusion Policies for Navigation and Exploration (ICRA 2024) — [arXiv:2310.07896](https://arxiv.org/abs/2310.07896), [code](https://github.com/robodhruv/visualnav-transformer)
+- **CityWalker**: Learning Embodied Urban Navigation from Web-Scale Videos (CVPR 2025) — [arXiv:2411.17820](https://arxiv.org/abs/2411.17820), [code](https://github.com/ai4ce/CityWalker)
+- **MBRA**: Learning to Drive Anywhere with Model-Based Reannotation (RA-L 2025) — [arXiv:2505.05592](https://arxiv.org/abs/2505.05592), [code](https://github.com/NHirose/Learning-to-Drive-Anywhere-with-MBRA)
+- **NavDP**: Learning Sim-to-Real Navigation Diffusion Policy with Privileged Information Guidance (ICRA 2026) — [arXiv:2505.08712](https://arxiv.org/abs/2505.08712), [code](https://github.com/InternRobotics/NavDP)
+- **S2E**: From Seeing to Experiencing: Scaling Navigation Foundation Models with Reinforcement Learning (ICLR 2026) — [arXiv:2507.22028](https://arxiv.org/abs/2507.22028), [code](https://github.com/VAIL-UCLA/S2E)
+- **SocialNav**: Training Human-Inspired Foundation Model for Socially-Aware Embodied Navigation (CVPR 2026 oral) — [arXiv:2511.21135](https://arxiv.org/abs/2511.21135), [code](https://github.com/AMAP-EAI/SocialNav)
+- **InternVLA-N1**: Ground Slow, Move Fast: A Dual-System Foundation Model for Generalizable Vision-Language Navigation (ICLR 2026) — [arXiv:2512.08186](https://arxiv.org/abs/2512.08186), [code](https://github.com/InternRobotics/InternNav)
+- **MIMIC**: Learning Sidewalk Autopilot from Multi-Scale Imitation with Corrective Behavior Expansion (ICRA 2026) — [arXiv:2603.22527](https://arxiv.org/abs/2603.22527), [code](https://github.com/VAIL-UCLA/MIMIC)
+- **FlowPilot**: From Imitation to Alignment: Human-Preference Flow Policies for Long-Horizon Sidewalk Navigation (CoRL 2026) — [arXiv:2606.12603](https://arxiv.org/abs/2606.12603), [code](https://github.com/VAIL-UCLA/FlowPilot), [project](https://vail.cs.ucla.edu/FlowPilot)
+
+World models, generative building blocks, simulators and benchmarks:
+
+- **NWM**: Navigation World Models (CVPR 2025) — [arXiv:2412.03572](https://arxiv.org/abs/2412.03572), [code](https://github.com/facebookresearch/nwm)
+- **Diffusion Policy** (RSS 2023, IJRR 2025) — [arXiv:2303.04137](https://arxiv.org/abs/2303.04137), [code](https://github.com/real-stanford/diffusion_policy); **DiT** (ICCV 2023) — [arXiv:2212.09748](https://arxiv.org/abs/2212.09748), [code](https://github.com/facebookresearch/DiT); **Flow matching** (ICLR 2023) — [arXiv:2210.02747](https://arxiv.org/abs/2210.02747)
+- **MetaUrban** (ICLR 2025) — [arXiv:2407.08725](https://arxiv.org/abs/2407.08725), [code](https://github.com/metadriverse/metaurban); **SidewalkBench** (CoRL 2026) — [arXiv:2606.16953](https://arxiv.org/abs/2606.16953)
+
 ## Citation
 
 If VisNavKit helps your work, please consider citing it:
@@ -227,27 +250,4 @@ If VisNavKit helps your work, please consider citing it:
 
 GitHub's *Cite this repository* button reads [`CITATION.cff`](CITATION.cff), which carries the
 same entry. Please also cite the work a recipe adapts: [`CITATION.bib`](CITATION.bib) has one
-per paper below, taken from the publisher's record or arXiv's export, never transcribed.
-
-## Research references
-
-Navigation policies, oldest first. Every one but ViKiNG has a recipe in the table above.
-
-- **ViKiNG**: Vision-Based Kilometer-Scale Navigation with Geographic Hints (RSS 2022) — [arXiv:2202.11271](https://arxiv.org/abs/2202.11271)
-- **GNM**: A General Navigation Model to Drive Any Robot (ICRA 2023) — [arXiv:2210.03370](https://arxiv.org/abs/2210.03370), [code](https://github.com/robodhruv/drive-any-robot)
-- **ViNT**: A Foundation Model for Visual Navigation (CoRL 2023) — [arXiv:2306.14846](https://arxiv.org/abs/2306.14846), [code](https://github.com/robodhruv/visualnav-transformer)
-- **NoMaD**: Goal Masked Diffusion Policies for Navigation and Exploration (ICRA 2024) — [arXiv:2310.07896](https://arxiv.org/abs/2310.07896), [code](https://github.com/robodhruv/visualnav-transformer)
-- **CityWalker**: Learning Embodied Urban Navigation from Web-Scale Videos (CVPR 2025) — [arXiv:2411.17820](https://arxiv.org/abs/2411.17820), [code](https://github.com/ai4ce/CityWalker)
-- **MBRA**: Learning to Drive Anywhere with Model-Based Reannotation (RA-L 2025) — [arXiv:2505.05592](https://arxiv.org/abs/2505.05592), [code](https://github.com/NHirose/Learning-to-Drive-Anywhere-with-MBRA)
-- **NavDP**: Learning Sim-to-Real Navigation Diffusion Policy with Privileged Information Guidance — [arXiv:2505.08712](https://arxiv.org/abs/2505.08712), [code](https://github.com/InternRobotics/NavDP)
-- **S2E**: From Seeing to Experiencing: Scaling Navigation Foundation Models with Reinforcement Learning (ICLR 2026) — [arXiv:2507.22028](https://arxiv.org/abs/2507.22028), [code](https://github.com/VAIL-UCLA/S2E)
-- **SocialNav**: Training Human-Inspired Foundation Model for Socially-Aware Embodied Navigation — [arXiv:2511.21135](https://arxiv.org/abs/2511.21135), [code](https://github.com/AMAP-EAI/SocialNav)
-- **InternVLA-N1**: Ground Slow, Move Fast: A Dual-System Foundation Model for Generalizable Vision-and-Language Navigation — [arXiv:2512.08186](https://arxiv.org/abs/2512.08186), [code](https://github.com/InternRobotics/InternNav)
-- **MIMIC**: Learning Sidewalk Autopilot from Multi-Scale Imitation with Corrective Behavior Expansion (ICRA 2026) — [arXiv:2603.22527](https://arxiv.org/abs/2603.22527), [code](https://github.com/VAIL-UCLA/MIMIC)
-- **FlowPilot**: From Imitation to Alignment: Human-Preference Flow Policies for Long-Horizon Sidewalk Navigation (CoRL 2026) — [arXiv:2606.12603](https://arxiv.org/abs/2606.12603), [code](https://github.com/VAIL-UCLA/FlowPilot), [project](https://vail.cs.ucla.edu/FlowPilot)
-
-World models, generative building blocks, simulators and benchmarks:
-
-- **NWM**: Navigation World Models (CVPR 2025) — [arXiv:2412.03572](https://arxiv.org/abs/2412.03572), [code](https://github.com/facebookresearch/nwm)
-- **Diffusion Policy** (RSS 2023) — [arXiv:2303.04137](https://arxiv.org/abs/2303.04137), [code](https://github.com/real-stanford/diffusion_policy); **DiT** (ICCV 2023) — [arXiv:2212.09748](https://arxiv.org/abs/2212.09748), [code](https://github.com/facebookresearch/DiT); **Flow matching** (ICLR 2023) — [arXiv:2210.02747](https://arxiv.org/abs/2210.02747)
-- **MetaUrban** (ICLR 2025) — [arXiv:2407.08725](https://arxiv.org/abs/2407.08725), [code](https://github.com/metadriverse/metaurban); **SidewalkBench** — [arXiv:2606.16953](https://arxiv.org/abs/2606.16953)
+per paper listed above, taken from Google Scholar's BibTeX export, never transcribed.
