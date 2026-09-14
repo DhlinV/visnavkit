@@ -18,6 +18,11 @@ logger:
 plan_len_seconds: 3
 plan_len_points: 10
 
+# Start from an existing VisNavKit checkpoint; strict=false loads only the stages that match.
+pretrained:
+  ckpt_path: null
+  strict: true
+
 trainer:
   kwargs:
     max_epochs: 50

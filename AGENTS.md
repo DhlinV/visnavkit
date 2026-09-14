@@ -61,4 +61,7 @@ Hydra groups mirror that layout under `visnavkit/configs/model/`. Full contracts
 - Adding a component: subclass the stage base, add a yaml to the matching config group with an
   explicit `_target_`, run `uv run visnavkit-sanity-check model/<group>=<name> --onnx`, then add
   it to the group test in `tests/models/test_model_configs.py`.
-- Tests must pass without network access or a dataset; use the synthetic fixtures in `tests/`.
+- Tests must pass without network access or a dataset; use the synthetic fixtures in `tests/`,
+  or drop a tiny corpus into `assets/datasets/` and `tests/data/test_assets.py` picks it up.
+- Every paper a recipe adapts has an entry in `CITATION.bib`; add one (arXiv's own export, not a
+  transcription) when adding a recipe.

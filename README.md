@@ -114,6 +114,8 @@ reproductions or checkpoint-compatible replacements.
 | `mbra` | EfficientNet-B0 | causal x4 | point | regression |
 | `navdp` | DINOv2 ViT-S | causal x4 | point | diffusion DiT |
 | `s2e` | DINOv3 ViT-S | causal x1 | point, 50% goal dropout | MHP |
+| `socialnav` | FastViT-T8 | causal x1 | instruction (VLM prior) | flow DiT |
+| `internvla_n1` | DINOv2 ViT-S | causal x1 | instruction (System 2 latent) | flow DiT (384, x12) |
 | `mimic` | FastViT-T8 | causal x1 | none | MHP |
 | `flowpilot` | FastViT-T8 + speed head | causal x1 | point | anchored flow DiT, Beta(1.5, 1) times |
 
@@ -157,6 +159,41 @@ Opt-in modality inputs:
   describes the image the policy sees.
 
 `dataset=torch` decodes on CPU; `dataset=dali` decodes on GPU (point goals, speed-only ego).
+
+### Public corpora
+
+Recorded sidewalk and off-road navigation datasets this format targets. Each needs a one-off
+conversion into the clip layout above; `visnavkit-dataset command=preprocess` validates the
+result. Converters are not bundled — the sources differ too much to guess at.
+
+| Corpus | Content | Source |
+| --- | --- | --- |
+| FrodoBots-2K | ~2000 h teleoperated sidewalk driving in 10+ cities; RGB, GPS, IMU, audio, control | [BitRobot/FrodoBots-2K](https://huggingface.co/datasets/BitRobot/FrodoBots-2K) |
+| RECON | Off-road exploration with goal images | [project](https://sites.google.com/view/recon-robot/dataset) |
+| SCAND | Socially compliant human-teleoperated navigation | [project](https://www.cs.utexas.edu/~xiao/SCAND/SCAND.html#Links) |
+| GoStanford2 | Indoor trajectories, the ViNT-modified release | [download](https://drive.google.com/drive/folders/1RYseCpbtHEFOsmSX2uqNY_kvSxwZLVP_?usp=sharing) |
+| SACSoN / HuRoN | Indoor navigation among people | [project](https://sites.google.com/view/sacson-review/huron-dataset) |
+
+The last four are ViNT's public training set, listed in
+[visualnav-transformer](https://github.com/robodhruv/visualnav-transformer). Tiny bundled
+corpora live in [`assets/datasets/`](assets/) and are exercised by `tests/data/test_assets.py`.
+
+## Pretrained weights
+
+VisNavKit ships no trained policies; the recipes are architectures, not checkpoints. What it
+does load:
+
+| Weights | How |
+| --- | --- |
+| timm backbone (ImageNet, DINOv2/v3, CLIP, SigLIP, ...) | `model.vision_encoder.pretrained=true`, the default |
+| A vision encoder you trained | `model.vision_encoder.weights=/path/encoder.pt` |
+| A full VisNavKit checkpoint | `pretrained.ckpt_path=/path/last.ckpt`, with `pretrained.strict=false` to take the stages that match |
+| Published navigation ONNX exports | `visnavkit-benchmark` downloads the pinned zoo — see [model catalog](docs/models.md) |
+
+Upstream releases (GNM/ViNT/NoMaD, CityWalker, S2E, MBRA, SocialNav, InternVLA-N1) publish their
+own checkpoints, linked in the references below. They are **not** loadable into these recipes:
+the recipes adapt the architectures to this repo's data contract, so the tensors do not line up.
+Treat them as references and as benchmark baselines, not as initialization.
 
 ## Train, export, benchmark
 
@@ -216,6 +253,22 @@ The following repositories greatly inspire VisNavKit:
 
 Thanks to the maintainers of these projects for their contribution to the community!
 
+## Citation
+
+If VisNavKit helps your work, please consider citing it:
+
+```bibtex
+@Misc{visnavkit2026,
+  author       = {DhlinV},
+  title        = {{VisNavKit}: a composable toolkit for visual navigation policies},
+  howpublished = {\url{https://github.com/DhlinV/visnavkit}},
+  year         = {2026},
+}
+```
+
+Please also cite the work a recipe adapts — [`CITATION.bib`](CITATION.bib) carries an entry for
+every paper below, exported from arXiv rather than transcribed.
+
 <details>
 <summary>Research references</summary>
 
@@ -229,6 +282,8 @@ Navigation policies, oldest first; the last four are the recipes this repo adapt
 - **MBRA**: Learning to Drive Anywhere with Model-Based Reannotation (RA-L 2025) — [arXiv:2505.05592](https://arxiv.org/abs/2505.05592), [code](https://github.com/NHirose/Learning-to-Drive-Anywhere-with-MBRA)
 - **NavDP**: Learning Sim-to-Real Navigation Diffusion Policy with Privileged Information Guidance — [arXiv:2505.08712](https://arxiv.org/abs/2505.08712), [code](https://github.com/InternRobotics/NavDP)
 - **S2E**: From Seeing to Experiencing: Scaling Navigation Foundation Models with Reinforcement Learning (ICLR 2026) — [arXiv:2507.22028](https://arxiv.org/abs/2507.22028), [code](https://github.com/VAIL-UCLA/S2E)
+- **SocialNav**: Training Human-Inspired Foundation Model for Socially-Aware Embodied Navigation — [arXiv:2511.21135](https://arxiv.org/abs/2511.21135), [code](https://github.com/AMAP-EAI/SocialNav)
+- **InternVLA-N1**: Ground Slow, Move Fast: A Dual-System Foundation Model for Generalizable Vision-and-Language Navigation — [arXiv:2512.08186](https://arxiv.org/abs/2512.08186), [code](https://github.com/InternRobotics/InternNav)
 - **MIMIC**: Learning Sidewalk Autopilot from Multi-Scale Imitation with Corrective Behavior Expansion (ICRA 2026) — [arXiv:2603.22527](https://arxiv.org/abs/2603.22527), [code](https://github.com/VAIL-UCLA/MIMIC)
 - **FlowPilot**: From Imitation to Alignment: Human-Preference Flow Policies for Long-Horizon Sidewalk Navigation (CoRL 2026) — [arXiv:2606.12603](https://arxiv.org/abs/2606.12603), [code](https://github.com/VAIL-UCLA/FlowPilot), [project](https://vail.cs.ucla.edu/FlowPilot)
 

@@ -48,6 +48,8 @@ def _targets(cfg):
         ("mbra", ("TimmCNNEncoder", "CausalTemporalEncoder", "point", "RegressionDecoder"), 4),
         ("navdp", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "GenerativeDecoder"), 4),
         ("s2e", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "MHPDecoder"), 1),
+        ("socialnav", ("TimmCNNEncoder", "CausalTemporalEncoder", "instruction", "GenerativeDecoder"), 1),
+        ("internvla_n1", ("TimmViTEncoder", "CausalTemporalEncoder", "instruction", "GenerativeDecoder"), 1),
         ("mimic", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "MHPDecoder"), 1),
         ("flowpilot", ("TimmCNNEncoder", "CausalTemporalEncoder", "point", "GenerativeDecoder"), 1),
     ],
@@ -254,6 +256,17 @@ def test_modality_encoder_group_is_an_open_set(option, expected):
         "+model.modality_encoders.imu.in_dim=6",
     )
     assert instantiate(extra.model).modality_input_names == [*expected, "imu"]
+
+
+def test_internvla_n1_sizes_its_denoiser_like_system_one():
+    """Hidden 384, 12 layers, 6 heads — the paper's low-latency executor."""
+    denoiser = _compose("model=internvla_n1").model.action_decoder.denoiser
+    assert (denoiser.hidden, denoiser.depth, denoiser.num_heads) == (384, 12, 6)
+
+
+def test_pretrained_block_is_available_without_plus():
+    cfg = _compose("model=mimic", "pretrained.strict=false")
+    assert cfg.pretrained.ckpt_path is None and cfg.pretrained.strict is False
 
 
 def test_flowpilot_recipe_follows_the_paper_knobs():

@@ -1,0 +1,17 @@
+# InternVLA-N1-style (arXiv:2512.08186, InternRobotics): System 1, the fast executor — a
+# DepthAnythingV2-Small ViT encoder (DINOv2 ViT-S stands in for it) and a flow-matching DiT of
+# hidden 384, 12 layers and 6 heads, conditioned on System 2's low-frequency trajectory latents,
+# which arrive here as a precomputed embedding. Differences: System 2 is out of scope, so there
+# is no pixel-goal grounding and no asynchronous latent-plan finetuning stage.
+defaults:
+  - base
+  - override vision_encoder: dinov2_s
+  - override goal_encoder: instruction
+  - override action_decoder: flow_dit
+  - _self_
+
+action_decoder:
+  denoiser:
+    hidden: 384
+    depth: 12
+    num_heads: 6

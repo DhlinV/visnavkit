@@ -1,0 +1,10 @@
+# SocialNav-style (arXiv:2511.21135, AMAP-EAI): the Action Expert half — a conditional
+# flow-matching decoder driven by the semantic prior its VLM Brain produces, which arrives here
+# as a precomputed embedding on the instruction goal. Differences: no VLM, so no chain-of-thought
+# or social-traversability prediction, and no SAFE-GRPO stage; the paper does not state the
+# Action Expert's visual backbone, so this keeps the default.
+defaults:
+  - base
+  - override goal_encoder: instruction
+  - override action_decoder: flow_dit
+  - _self_
