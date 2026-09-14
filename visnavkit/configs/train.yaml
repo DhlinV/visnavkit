@@ -50,4 +50,12 @@ common:
   # goal_horizon_s[1] seconds after the last observed frame (point / image goals).
   goal_horizon_s: [3.0, 15.0]
 
+  # Per-frame ego status packed into the `ego` batch entry; [] disables it. The ego encoder's
+  # in_dim must match this width (speed -> 1 channel, yaw_rate -> 1 channel).
+  ego_features: []
+
+  # Read camera_intrinsics.npy / camera_extrinsics.npy sidecars and adjust K for the crop and
+  # downscale; pair it with model/camera_encoder=pinhole.
+  use_camera: false
+
   data_root: /data/nav_clips  # placeholder until the first dataset lands

@@ -38,7 +38,7 @@ def test_goal_free_encoder_emits_zero_tokens():
 def test_goal_tokens_null_token_and_dropout(encoder):
     encoder.eval()
     goal = encoder.example_input(3, image_hw=(32, 32))
-    observation = torch.rand(3, 6, 32, 32)
+    observation = torch.rand(3, 3, 32, 32)
     tokens = encoder(goal, observation=observation)
     assert tokens.shape == (3, encoder.num_tokens, D)
     assert torch.isfinite(tokens).all()

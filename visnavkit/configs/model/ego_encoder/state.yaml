@@ -1,0 +1,8 @@
+# Free-form per-frame ego status; in_dim must match the width the dataset packs into `ego`
+# (common.ego_features, e.g. [speed] -> 1, [speed, yaw_rate] -> 2).
+_target_: visnavkit.models.ego.state.EgoStateEncoder
+feat_size: ${model.feat_size}
+in_dim: 1
+hidden: 128
+num_tokens: 1
+p_drop: 0.0  # ego dropout: also learn to act when the ego status is missing at deployment

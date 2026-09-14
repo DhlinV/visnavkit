@@ -12,15 +12,14 @@ from visnavkit.models.vision.base import BaseVisionEncoder
 class TimmViTEncoder(BaseVisionEncoder):
     """Any timm ViT with ``forward_features``: pooled/CLS token as the frame embedding, patch tokens as the map.
 
-    Inputs are padded to a patch multiple. ``pair_mode=late`` (default) keeps the pretrained
-    three-channel patch embedding and shares the backbone between the two frames.
+    Inputs are padded to a patch multiple, so the pretrained three-channel patch embedding is
+    used unchanged.
     """
 
     def __init__(
         self,
         backbone_name: str = "vit_small_patch14_dinov2",
         pretrained: bool = True,
-        pair_mode: str = "late",
         freeze_backbone: bool = True,
         heads=None,
         **kwargs,
@@ -31,13 +30,11 @@ class TimmViTEncoder(BaseVisionEncoder):
             backbone_name,
             pretrained=pretrained,
             num_classes=0,
-            in_chans=6 if pair_mode == "early" else 3,
+            in_chans=3,
             dynamic_img_size=True,
             dynamic_img_pad=True,
         )
-        super().__init__(
-            backbone, backbone.num_features, pair_mode=pair_mode, freeze_backbone=freeze_backbone, **kwargs
-        )
+        super().__init__(backbone, backbone.num_features, freeze_backbone=freeze_backbone, **kwargs)
         self.backbone_name = backbone_name
 
     @torch.no_grad()

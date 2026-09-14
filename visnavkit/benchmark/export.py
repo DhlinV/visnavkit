@@ -56,8 +56,9 @@ def load_native_model(cfg, checkpoint=None):
 class SequencePolicy(nn.Module):
     """One decision per independent history window; no hidden feature cache.
 
-    Goal-conditioned recipes run with their learned null goal token (goal-free inference, as
-    in NoMaD exploration); the metadata labels this ``null_goal_token``.
+    Goal-conditioned recipes run with their learned null goal token (goal-free inference, as in
+    NoMaD exploration) and, when the recipe consumes ego status or calibration, their null tokens;
+    the metadata labels them. ``speed`` is emitted only by recipes with the auxiliary speed head.
     """
 
     def __init__(self, model):
@@ -66,23 +67,36 @@ class SequencePolicy(nn.Module):
         self.decoder = model.action_decoder
 
     @property
-    def conditioning(self) -> str:
-        return "goal_free" if self.model.goal_encoder.num_tokens == 0 else "null_goal_token"
+    def output_names(self) -> list[str]:
+        return ["trajectories", "scores"] + (["speed"] if self.model.vision_encoder.has_speed_head else [])
 
-    def forward(self, frames, initial_noise=None):
-        batch, history = frames.shape[:2]
-        vision = self.model.encode_frames(frames)
-        tokens = vision.tokens.reshape(batch, history, self.model.num_tokens, self.model.feat_size)
-        context = self.model.temporal_encoder(tokens)[:, -1]
-        goal_tokens = (
-            None if self.model.goal_encoder.num_tokens == 0 else self.model.goal_encoder(None, batch_size=batch)
+    @property
+    def conditioning(self) -> str:
+        parts = ["goal_free" if self.model.goal_tokens == 0 else "null_goal_token"]
+        if self.model.ego_tokens:
+            parts.append("null_ego_token")
+        if self.model.camera_tokens:
+            parts.append("null_camera_token")
+        return "+".join(parts)
+
+    def forward(self, vision, initial_noise=None):
+        batch, history = vision.shape[:2]
+        encoded = self.model.encode_frames(vision)
+        tokens = self.model._per_frame_tokens(
+            encoded.tokens.reshape(batch, history, self.model.vision_tokens, self.model.feat_size),
+            self.model.encode_ego(None, batch, history),
+            self.model.encode_camera(None, None, batch, history, vision.shape[-2:]),
+            dim=2,
         )
-        flat = self.decoder(context, goal_tokens, initial_noise).plans
+        context = self.model.temporal_encoder(tokens)[:, -1]
+        flat = self.decoder(context, self.model.null_goal_tokens(batch), initial_noise).plans
         parsed = parse_plan_output(
             flat, num_modes=self.decoder.num_modes, num_pts=self.decoder.num_pts, pose_size=self.decoder.pose_size
         )
-        speed = vision.pose.reshape(batch, history, -1)[:, -1]
-        return parsed["plans"], parsed["confs"], speed
+        outputs = (parsed["plans"], parsed["confs"])
+        if self.model.vision_encoder.has_speed_head:
+            outputs += (encoded.speed.reshape(batch, history, -1)[:, -1],)
+        return outputs
 
 
 def export_native(cfg, output, *, checkpoint=None, seed=42, batch_size=1, model_id="base"):
@@ -113,11 +127,11 @@ def export_native(cfg, output, *, checkpoint=None, seed=42, batch_size=1, model_
     h, w = int(size.crop_wh[1] // size.downscale_factor), int(size.crop_wh[0] // size.downscale_factor)
     model.vision_encoder = model.vision_encoder.prepare_for_export((h, w))
     wrapper = SequencePolicy(model).eval()
-    frames = torch.rand(batch_size, int(size.seq_length), 6, h, w)
+    frames = torch.rand(batch_size, int(size.seq_length), 3, h, w)
     head = model.action_decoder
     is_diffusion = head.uses_noise
     inputs = (frames,)
-    names = ["frames"]
+    names = ["vision"]
     if is_diffusion:
         inputs += (head.example_noise(batch_size),)
         names += ["initial_noise"]
@@ -134,7 +148,7 @@ def export_native(cfg, output, *, checkpoint=None, seed=42, batch_size=1, model_
                 inputs,
                 str(output),
                 input_names=names,
-                output_names=["trajectories", "scores", "speed"],
+                output_names=wrapper.output_names,
                 opset_version=17,
                 dynamo=False,
                 # Fixed batch/context dimensions make the benchmark contract explicit.
@@ -146,7 +160,7 @@ def export_native(cfg, output, *, checkpoint=None, seed=42, batch_size=1, model_
     feeds = {name: tensor.numpy() for name, tensor in zip(names, inputs)}
     actual = session.run(None, feeds)
     parity = {}
-    for name, reference, observed in zip(["trajectories", "scores", "speed"], expected, actual):
+    for name, reference, observed in zip(wrapper.output_names, expected, actual):
         target = reference.detach().numpy()
         np.testing.assert_allclose(observed, target, rtol=2e-3, atol=2e-4, err_msg=name)
         parity[name] = {"max_abs_error": float(np.max(np.abs(observed - target)))}
@@ -159,6 +173,7 @@ def export_native(cfg, output, *, checkpoint=None, seed=42, batch_size=1, model_
         "checkpoint_sha256": sha256_file(checkpoint_path) if has_checkpoint else None,
         "onnx_sha256": sha256_file(output),
         "inference_mode": "full_context",
+        "output_names": wrapper.output_names,
         "conditioning": wrapper.conditioning,
         "precision": "float32",
         "input_shapes": {name: list(value.shape) for name, value in feeds.items()},

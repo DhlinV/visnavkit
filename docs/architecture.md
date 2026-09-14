@@ -1,8 +1,9 @@
 # Architecture
 
-A policy is four stages connected by tokens of width `feat_size`. Hydra instantiates
-each stage from its own config group; `NavigationPolicy` connects them and `LitModel`
-handles optimization and metrics. The decomposition follows
+A policy takes four inputs — vision, goal, ego status and camera calibration — and
+connects its stages with tokens of width `feat_size`. Hydra instantiates each stage from
+its own config group; `NavigationPolicy` owns the wiring and `LitModel` handles
+optimization and metrics. The decomposition follows
 [diffusers](https://github.com/huggingface/diffusers) (typed outputs, denoiser and
 scheduler as separate objects) and [LeRobot](https://github.com/huggingface/lerobot)
 (one training forward, one deployment predict).
@@ -12,14 +13,21 @@ visnavkit/models/
 ├── policy.py            NavigationPolicy: forward (training) / predict (deployment)
 ├── outputs.py           VisionOutput, PlanOutput, PolicyOutput dataclasses
 ├── lit_model.py         Lightning module: targets, losses, metrics, optimizer
-├── vision/              frames -> tokens
-│   ├── base.py          pair preparation, token modes, projection, speed head
+├── vision/              one RGB frame -> tokens
+│   ├── base.py          frame normalization, token modes, projection, optional heads
+│   ├── speed_head.py    optional auxiliary per-frame speed regression
 │   ├── timm_cnn.py      any features_only timm backbone (ResNet, EfficientNet, ConvNeXt, FastViT, ...)
 │   └── timm_vit.py      any timm ViT (DINOv2/v3, DeiT, EVA-02, SigLIP, CLIP, ...)
+├── ego/                 per-frame ego status -> tokens
+│   ├── base.py          null token, ego dropout
+│   └── none.py / state.py
+├── camera/              per-frame intrinsics + extrinsics -> tokens
+│   ├── base.py          null token, calibration dropout
+│   └── none.py / pinhole.py
 ├── temporal/            tokens across frames -> context
 │   ├── base.py          transformer over (frames x tokens), reductions
 │   ├── causal.py / bidirectional.py / identity.py
-├── goal/                goal specification -> goal tokens
+├── goal/                goal specification(s) -> goal tokens
 │   ├── base.py          null token, goal dropout
 │   ├── none.py / point.py / image.py / route.py / instruction.py
 └── action/              context (+ goal) tokens -> trajectories
@@ -37,22 +45,37 @@ visnavkit/models/
 
 | Stage | Input | Output |
 | --- | --- | --- |
-| Vision encoder | `(N, 6, H, W)` previous/current RGB pair in [0, 1] | `VisionOutput(tokens (N, K, D), pose (N, 1), prev_img_mask (N,))` |
-| Temporal encoder | `(B, F, K, D)` | `(B, F', K, D)`, `F' = F` for `reduction=none`, else 1 |
-| Goal encoder | goal batch (see below) or `None` | `(N, G, D)`; `G = 0` for `none` |
+| Vision encoder | `(N, 3, H, W)` RGB frame in [0, 1] | `VisionOutput(tokens (N, Kv, D), speed (N, 1) or None)` |
+| Ego encoder | `(B, F, E)` free-form ego status or `None` | `(B, F, Ke, D)`; `Ke = 0` for `none` |
+| Camera encoder | `(B, F, 3, 3)` intrinsics + `(B, F, 4, 4)` extrinsics or `None` | `(B, F, Kc, D)`; `Kc = 0` for `none` |
+| Temporal encoder | `(B, F, K, D)`, `K = Kv + Ke + Kc` | `(B, F', K, D)`, `F' = F` for `reduction=none`, else 1 |
+| Goal encoder(s) | one goal batch each (see below) or `None` | `(N, G, D)` concatenated; `G = 0` for `none` |
 | Action decoder | context `(N, K, D)`, goal `(N, G, D)`, optional noise | `PlanOutput(plans (N, M * (2 * T * P + 1)), ...)` |
 
-- **Tokens per frame** `K`: `token_mode=global` (1), `patch` (`gh * gw` pooled patches),
-  `fused` (1 + grid). Patch tokens carry a learned position embedding; the temporal
-  encoder shares its frame position across the `K` tokens and expands the causal mask.
-- **Pair fusion**: `pair_mode=early` feeds the 6-channel stack to the backbone;
-  `late` runs a shared 3-channel backbone on both frames and concatenates embeddings
-  (default for pretrained ViTs).
+- **Tokens per frame** `K`: the vision encoder's `token_mode=global` (1), `patch`
+  (`gh * gw` pooled patches) or `fused` (1 + grid), plus one ego token and one camera
+  token when those stages are enabled. Patch tokens carry a learned position embedding;
+  the temporal encoder shares its frame position across the `K` tokens and expands the
+  causal mask. `K * D` is also the width of one deployment feature-buffer slot.
+- **Side inputs are optional**: every non-vision encoder has a learned null token, so a
+  missing goal, ego status or calibration still produces well-formed tokens. `p_drop`
+  substitutes that null token for a fraction of training samples, so the same weights
+  work with and without the input (goal-free exploration, NoMaD style).
 - **Goal batches**: point goals are per frame, `(B, F, 3)` as (distance, cos, sin) in
   each frame's ego frame; image `(B, 3, h, w)`, route image `(B, C, h, w)` and
-  instruction `(B, E)` goals describe the whole window. `p_drop` replaces a sample's goal
-  tokens with the learned null token during training; passing `goal=None` at inference
-  uses the same null token (goal-free exploration, NoMaD style).
+  instruction `(B, E)` goals describe the whole window. `goal_encoder` may be a **list**,
+  in which case `goal` is a list in the same order and the tokens are concatenated; the
+  dataset's `goal_type` takes the matching list.
+- **Ego status** is deliberately free-form `(B, F, E)`: the dataset decides what the
+  channels mean (`common.ego_features`) and the encoder only needs `in_dim` to match.
+- **Calibration** is per frame so a moving or switching camera is expressible; the
+  pinhole encoder normalizes the intrinsics by the resolution the policy is actually
+  running at (`fx / W`, `fy / H`, `cx / W`, `cy / H`) and adds the extrinsic rotation and
+  translation, so the same weights transfer across crops and downscales.
+- **Auxiliary heads**: the per-frame speed regression is a recipe-specific training
+  signal (`vision_encoder.speed_head=true`), not part of the contract. Without it
+  `VisionOutput.speed` is None, there is no `vision_*` loss, and the export graph has no
+  `speed` output.
 - **Conditioning**: the decoder concatenates context and goal tokens with a type
   embedding and pools them with one learned attention query (or the mean). One context
   token with no goal is passed through unchanged, so goal-free single-token recipes cost
@@ -107,19 +130,24 @@ optimizer state belongs to. Denoising decoders benefit most; it is off by defaul
 
 ## Deployment versus benchmark export
 
-`NavigationPolicy.predict(frame, feature_buffer, goal=None, noise=None)` encodes one
-frame and reuses buffered past tokens `(B, history, K * D)`; `scripts/export.py`
-traces it with presence-driven inputs and verifies ONNX Runtime parity (enforced for
-checkpoints, reported for untrained pipeline checks). `benchmark/export.py` traces the
-full observation window with fixed shapes and outputs `trajectories`, `scores`, `speed`
-for latency and open-loop measurements. Both flip `reduction=none` to `last`, precompute
+`NavigationPolicy.predict(frame, feature_buffer, goal=None, ego=None, intrinsics=None,
+extrinsics=None, noise=None)` encodes one frame and reuses buffered past tokens
+`(B, history, K * D)`; the newest frame's side inputs are passed without a frame axis
+(`ego (B, E)`, `intrinsics (B, 3, 3)`, `extrinsics (B, 4, 4)`). `scripts/export.py` traces
+it with presence-driven inputs — `vision`, `feature_buffer`, one `goal` input per goal
+encoder, `ego`, `intrinsics`/`extrinsics`, `noise` — and verifies ONNX Runtime parity
+(enforced for checkpoints, reported for untrained pipeline checks). `benchmark/export.py`
+traces the full observation window with fixed shapes and outputs `trajectories`, `scores`
+(plus `speed` when the recipe has the auxiliary head) for latency and open-loop
+measurements. Both flip `reduction=none` to `last`, precompute
 ViT position embeddings for the export resolution, and disable the MHA fast path.
 
 ## Add a component
 
 1. Subclass the stage's base (`BaseVisionEncoder._encode`, `BaseTemporalEncoder`,
-   `BaseGoalEncoder.encode`, `BaseActionDecoder.decode/loss`, or a denoiser with the
-   shared signature) in the matching package.
+   `BaseGoalEncoder.encode`, `BaseEgoEncoder.encode`, `BaseCameraEncoder.encode`,
+   `BaseActionDecoder.decode/loss`, or a denoiser with the shared signature) in the
+   matching package.
 2. Add a yaml to the matching `configs/model/<group>/` directory with an explicit
    `_target_`; interpolate `feat_size` from `${model.feat_size}`.
 3. Run `uv run visnavkit-sanity-check model/<group>=<name> --onnx`, then add the entry to

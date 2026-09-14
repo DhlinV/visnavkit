@@ -12,7 +12,7 @@ uv run visnavkit-export checkpoint=<ckpt> output=<out.onnx>   # checkpoint=null:
 ## What `scripts/export.py` does
 1. Restores the checkpoint's model/preprocessing config (`prepare_export_config`), flips `temporal_encoder.reduction` `none -> last`.
 2. `LitModel.load_from_checkpoint(..., weights_only=False)`, then `reparameterize_model`: `.reparameterize()` (FastViT) + Linear->BatchNorm1d folding; `vision_encoder.prepare_for_export((h, w))` precomputes ViT position embeddings.
-3. Builds example inputs from `policy.example_inputs(...)`; input names are presence-driven: `input (1,6,h,w)`, `feature_buffer (1, seq_step*(seq_len-1), K*feat_size)`, then `goal` if the recipe has a goal encoder and `noise (1, M, T, A)` for generative decoders. Outputs: `plan, pose, feat_out, *heads`.
+3. Builds example inputs from `policy.example_inputs(...)`; input names are presence-driven: `vision (1,3,h,w)`, `feature_buffer (1, seq_step*(seq_len-1), K*feat_size)`, then one `goal` input per goal encoder (`goal`, or `goal_0..n`), `ego (1,E)` and `intrinsics (1,3,3)` / `extrinsics (1,4,4)` when those encoders are enabled, and `noise (1, M, T, A)` for generative decoders. Outputs: `plan, feat_out`, then `speed` when `vision_encoder.speed_head=true`, then `*heads`.
 4. Traces `policy.predict` with the MHA fastpath disabled, slims (onnxslim, optional extra), converts to fp16 (`half=true`, io kept fp32), enforces output order, and runs ONNX Runtime parity on the same nonzero inputs.
 
 ## Debugging

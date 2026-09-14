@@ -1,5 +1,6 @@
 # CityWalker-style (CVPR 2025): frozen DINOv2 frame features, 4-layer transformer over the window,
-# point-goal conditioning, deterministic waypoint regression. Differences: no past-odometry input.
+# point-goal conditioning, deterministic waypoint regression. Differences: no past odometry
+# (add it with ego_encoder=state and common.ego_features).
 defaults:
   - base
   - override vision_encoder: dinov2_s

@@ -52,14 +52,14 @@ class OnnxPredictor:
         for i in range(count):
             feeds = {}
             for node in inputs:
-                key = "frames" if node.name == "frames" else f"input__{node.name}"
+                key = node.name if node.name == "vision" else f"input__{node.name}"
                 if key not in data:
                     raise ValueError(f"Prepared dataset missing {key!r} for ONNX input {node.name!r}.")
                 values = np.asarray(data[key])
                 if values.shape[0] != count:
                     raise ValueError(f"{key} must have leading sample dimension {count}.")
                 value = values[i:i + 1]
-                if node.name == "frames" and value.dtype == np.uint8:
+                if node.name == "vision" and value.dtype == np.uint8:
                     value = value.astype(np.float32) / 255.0
                 # Diffusion noise input has candidate batch as its leading dimension.
                 if node.name == "initial_noise":

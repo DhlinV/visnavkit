@@ -9,33 +9,36 @@ import torch
 from hydra import compose, initialize_config_module
 from hydra.utils import instantiate
 
+from visnavkit.models.lit_model import disable_pretrained_downloads
+
+
+def _shapes(value):
+    if value is None:
+        return None
+    return [tuple(v.shape) if v is not None else None for v in value] if isinstance(value, list) else tuple(value.shape)
+
 
 def main(argv=None):
-    """Run the configured policy on random RGB pairs (and a synthetic goal) without downloads."""
+    """Run the configured policy on random vision/goal/ego inputs without downloads."""
     args = sys.argv[1:] if argv is None else argv
     overrides = [a if "=" in a else f"experiment={a}" for a in args]
     with initialize_config_module(version_base=None, config_module="visnavkit.configs"):
         cfg = compose(config_name="train", overrides=overrides)
-    cfg.model.vision_encoder.pretrained = False
-    if "pretrained" in cfg.model.goal_encoder:
-        cfg.model.goal_encoder.pretrained = False
+    disable_pretrained_downloads(cfg.model)
 
     batch, frames = 2, cfg.common.seq_length
     width, height = (d // cfg.common.downscale_factor for d in cfg.common.crop_wh)
     model = instantiate(cfg.model).eval()
-    x = torch.rand(batch, frames, 6, height, width)
-    goal_encoder = model.goal_encoder
-    goal = None
-    if goal_encoder.num_tokens:
-        goal = goal_encoder.example_input(batch * frames if goal_encoder.per_frame else batch, image_hw=(height, width))
-        if goal_encoder.per_frame:
-            goal = goal.reshape(batch, frames, -1)
+    vision, goal, ego, intrinsics, extrinsics = model.example_batch(batch, frames, (height, width))
     with torch.no_grad():
-        y = model(x, goal=goal)
+        y = model(vision, goal=goal, ego=ego, intrinsics=intrinsics, extrinsics=extrinsics)
 
-    print(f"{cfg.exp_name}: x {tuple(x.shape)}" + (f" goal {tuple(goal.shape)}" if goal is not None else ""))
+    print(
+        f"{cfg.exp_name}: vision {tuple(vision.shape)} goal {_shapes(goal)} ego {_shapes(ego)} "
+        f"camera {_shapes(intrinsics)}/{_shapes(extrinsics)}"
+    )
     print("plan:", {k: tuple(v.shape) for k, v in y.plan.items() if torch.is_tensor(v)})
-    print("pose:", tuple(y.vision.pose.shape), "tokens:", tuple(y.vision.tokens.shape))
+    print("tokens:", tuple(y.vision.tokens.shape), "speed:", _shapes(y.vision.speed))
 
 
 if __name__ == "__main__":

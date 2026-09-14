@@ -27,3 +27,9 @@ def quat2rot(quats):
 
 
 rot_from_quat = quat2rot
+
+
+def yaw_from_quat(quats):
+    """Heading (rotation about z) of wxyz quaternions, in radians."""
+    rotations = np.atleast_3d(quat2rot(quats))
+    return np.arctan2(rotations[:, 1, 0], rotations[:, 0, 0])

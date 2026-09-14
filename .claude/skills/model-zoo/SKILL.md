@@ -21,7 +21,7 @@ encoder x temporal encoder x goal encoder x action decoder — purely via yaml
 | dinov2 / dinov3 | DINO ViT-S (frozen) | causal x1 | none | mhp |
 | diffusion / flow_dit / anchor | fastvit_t8 | causal x1 | none | diffusion_mlp / flow_dit / anchor |
 
-All recipes are ADAPTATIONS to this repo's data contract (prev+cur frame pair, fixed-horizon
+All recipes are ADAPTATIONS to this repo's data contract (single RGB frames, fixed-horizon
 x/y/v targets, goals sampled from the clip's own future) — describe them as "-style", never as
 reproductions. Paper components that don't transfer (temporal-distance heads, topological
 graphs, past-odometry inputs, RL post-training) are intentionally omitted.

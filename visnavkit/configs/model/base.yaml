@@ -1,8 +1,10 @@
-# Default recipe: FastViT-T8 pair encoder -> causal transformer -> goal-free -> MHP decoder.
+# Default recipe: FastViT-T8 frame encoder -> causal transformer -> goal-free -> MHP decoder.
 defaults:
   - vision_encoder: fastvit_t8
   - temporal_encoder: causal
   - goal_encoder: none
+  - ego_encoder: none
+  - camera_encoder: none
   - action_decoder: mhp
   - _self_
 

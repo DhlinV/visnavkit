@@ -113,7 +113,7 @@ def goal_point_targets(frame_positions, frame_orientations, seq_idxs, goal_idx: 
 
 
 def get_current_frame_idxs(start_idx, frame_step, seq_step, sequence_length):
-    """Current frame indices for stacked previous/current frame pairs."""
+    """Indices of the observed frames in a window."""
     return [start_idx + frame_step + k * seq_step * frame_step for k in range(sequence_length)]
 
 

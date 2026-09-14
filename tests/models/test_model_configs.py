@@ -6,6 +6,8 @@ from hydra import compose, initialize_config_module
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 
+from visnavkit.models.lit_model import disable_pretrained_downloads
+
 SMALL = [
     "common.seq_length=3",
     "common.crop_wh=[32,32]",
@@ -63,12 +65,14 @@ def test_recipes_select_expected_components(recipe, expected, layers):
     OmegaConf.to_container(cfg.model, resolve=True, throw_on_missing=True)
 
 
-def test_dataset_follows_the_goal_encoder():
+def test_dataset_follows_the_goal_encoder_and_ego_features():
     cfg = _compose("dataset=torch", "model=s2e")
     assert cfg.dataset.train_loader.goal_type == "point"
     assert cfg.dataset.val_loader.goal_horizon_s == cfg.common.goal_horizon_s
-    cfg = _compose("dataset=torch", "model=gnm", "model/goal_encoder=none")
+    assert list(cfg.dataset.train_loader.ego_features) == []
+    cfg = _compose("dataset=torch", "model=gnm", "model/goal_encoder=none", "common.ego_features=[speed,yaw_rate]")
     assert cfg.dataset.train_loader.goal_type == "none"
+    assert list(cfg.dataset.train_loader.ego_features) == ["speed", "yaw_rate"]
 
 
 @pytest.mark.parametrize(
@@ -151,7 +155,7 @@ def test_every_action_decoder_group_runs(name):
     cfg = _compose(*SMALL, *_small_decoder(name))
     model = instantiate(cfg.model).eval()
     with torch.no_grad():
-        out = model(torch.rand(2, 3, 6, 32, 32))
+        out = model(torch.rand(2, 3, 3, 32, 32))
     assert out.plan.plans.shape == (6, model.action_decoder.flat_size)
     assert torch.isfinite(out.plan.plans).all()
     if name.startswith("anchor"):
@@ -163,21 +167,13 @@ def test_every_goal_encoder_group_runs(name):
     cfg = _compose(
         *SMALL, f"model/goal_encoder={name}", "model/vision_encoder=resnet18", "model.action_decoder.hidden=16"
     )
-    if "pretrained" in cfg.model.goal_encoder:
-        cfg.model.goal_encoder.pretrained = False
+    disable_pretrained_downloads(cfg.model)
     model = instantiate(cfg.model).eval()
-    encoder = model.goal_encoder
-    goal = None
-    if encoder.num_tokens:
-        goal = (
-            encoder.example_input(6, image_hw=(32, 32)).reshape(2, 3, -1)
-            if encoder.per_frame
-            else encoder.example_input(2, image_hw=(32, 32))
-        )
+    vision, goal, ego, *camera = model.example_batch(2, 3, (32, 32))
     with torch.no_grad():
-        out = model(torch.rand(2, 3, 6, 32, 32), goal=goal)
+        out = model(vision, goal=goal, ego=ego, intrinsics=camera[0], extrinsics=camera[1])
     assert out.plan.plans.shape[0] == 6
-    assert model.export_input_names() == ["input", "feature_buffer"] + (["goal"] if name != "none" else [])
+    assert model.export_input_names() == ["vision", "feature_buffer"] + (["goal"] if name != "none" else [])
 
 
 @pytest.mark.parametrize("name", ["identity", "causal", "causal_4layer", "bidirectional"])
@@ -193,7 +189,7 @@ def test_temporal_groups_and_token_modes(name, token_mode):
     )
     model = instantiate(cfg.model).eval()
     with torch.no_grad():
-        out = model(torch.rand(2, 3, 6, 32, 32))
+        out = model(torch.rand(2, 3, 3, 32, 32))
     decisions = 2 if name == "bidirectional" else 6
     assert out.plan.plans.shape[0] == decisions
     assert out.vision.tokens.shape[1] == (1 if token_mode == "global" else 5)
@@ -225,7 +221,7 @@ def test_vision_presets_run_a_small_forward(name):
     cfg = _compose(*SMALL, f"model/vision_encoder={name}", "model.action_decoder.hidden=16")
     model = instantiate(cfg.model).eval()
     with torch.no_grad():
-        out = model(torch.rand(2, 3, 6, 32, 32))
+        out = model(torch.rand(2, 3, 3, 32, 32))
     assert out.vision.tokens.shape == (6, 1, 8) and torch.isfinite(out.vision.tokens).all()
 
 

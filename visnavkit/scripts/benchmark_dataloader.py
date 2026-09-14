@@ -31,7 +31,7 @@ def bench(dataset_name: str, overrides: list[str], warmup: int, batches: int, de
     t0 = time.perf_counter()
     first = next(it)
     ttfb = time.perf_counter() - t0
-    frames = first["frames"]
+    frames = first["vision"]
     for _ in range(warmup):
         next(it)
 
@@ -40,7 +40,7 @@ def bench(dataset_name: str, overrides: list[str], warmup: int, batches: int, de
     t0 = time.perf_counter()
     n_samples = 0
     for _ in range(batches):
-        x = next(it)["frames"]
+        x = next(it)["vision"]
         if device == "cuda" and x.device.type == "cpu":
             x = x.to(device, non_blocking=True)
         n_samples += x.shape[0]

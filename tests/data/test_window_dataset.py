@@ -105,8 +105,9 @@ def test_real_video_decoding_and_target_alignment(tmp_path):
     )
     ds = Mp4WindowDataset(**config)
     sample = ds[-1]
-    assert sample["frames"].shape == (3, 6, 24, 32)
-    assert sample["frames"].dtype == torch.uint8
+    assert sample["vision"].shape == (3, 3, 24, 32)
+    assert sample["vision"].dtype == torch.uint8
+    assert "ego" not in sample
     torch.testing.assert_close(sample["future_poses"][:, -1, 0], torch.full((3,), 3.0))
     torch.testing.assert_close(sample["frame_times_s"], torch.tensor([1.05, 1.1, 1.15], dtype=torch.float64))
     torch.testing.assert_close(sample["target_times_s"], torch.tensor([0, 1 / 3, 4 / 3, 3]))
@@ -157,7 +158,7 @@ def test_goal_targets_follow_the_configured_goal_type(tmp_path, goal_type):
         assert torch.equal(goal, ds[0]["goal"])  # deterministic per window
     elif goal_type == "image":
         assert goal.shape == (3, 24, 32) and goal.dtype == torch.uint8
-        assert sample["frames"].shape == (3, 6, 24, 32)
+        assert sample["vision"].shape == (3, 3, 24, 32)
     elif goal_type == "route_image":
         assert goal.shape == (3, 8, 8) and int(goal[0, 0, 0]) == 7
     else:
@@ -165,6 +166,51 @@ def test_goal_targets_follow_the_configured_goal_type(tmp_path, goal_type):
     assert "goal" not in Mp4WindowDataset(**config)[0]
     with pytest.raises(ValueError, match="goal_type"):
         Mp4WindowDataset(**config, goal_type="waypoint")
+
+
+def test_goal_and_ego_lists(tmp_path):
+    """A list of goal types yields a list of goals, and ego_features packs the per-frame state."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("ffmpeg is required for the real-video integration test")
+    config = make_episode(tmp_path)
+    _render_video(ffmpeg, tmp_path)
+    sample = Mp4WindowDataset(
+        **config, goal_type=["point", "image"], goal_horizon_s=(1.0, 2.0), ego_features=["speed", "yaw_rate"]
+    )[0]
+    point, image = sample["goal"]
+    assert point.shape == (3, 3) and image.shape == (3, 24, 32)
+    assert sample["ego"].shape == (3, 2) and sample["ego"].dtype == torch.float32
+    torch.testing.assert_close(sample["ego"][:, :1], sample["frame_speeds"])
+    with pytest.raises(ValueError, match="ego_features"):
+        Mp4WindowDataset(**config, ego_features=["accel"])
+
+
+def test_camera_sidecars_follow_the_crop_downscale_and_flip(tmp_path):
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("ffmpeg is required for the real-video integration test")
+    config = {**make_episode(tmp_path), "crop_xy": (8, 4), "crop_wh": (16, 12), "downscale_factor": 2}
+    _render_video(ffmpeg, tmp_path, size="64x48")
+    intrinsics = np.array([[100.0, 0.0, 30.0], [0.0, 100.0, 20.0], [0.0, 0.0, 1.0]], dtype=np.float32)
+    extrinsics = np.eye(4, dtype=np.float32)
+    extrinsics[0, 3] = 1.5
+    np.save(tmp_path / "camera_intrinsics.npy", intrinsics)
+    np.save(tmp_path / "camera_extrinsics.npy", extrinsics)
+
+    sample = Mp4WindowDataset(**config, use_camera=True)[0]
+    assert sample["vision"].shape == (3, 3, 6, 8) and sample["extrinsics"].shape == (3, 4, 4)
+    # focal and principal point divide by the downscale; the principal point also shifts by the crop
+    torch.testing.assert_close(sample["intrinsics"][0, 0, 0], torch.tensor(50.0))
+    torch.testing.assert_close(sample["intrinsics"][0, 0, 2], torch.tensor(30.0 / 2 - 4))
+    torch.testing.assert_close(sample["intrinsics"][0, 1, 2], torch.tensor(20.0 / 2 - 2))
+    torch.testing.assert_close(sample["extrinsics"][0], torch.from_numpy(extrinsics))
+
+    torch.manual_seed(0)
+    flipped = Mp4WindowDataset(**{**config, "use_augs": True, "p_hflip": 1.0}, use_camera=True)[0]
+    width = sample["vision"].shape[-1]
+    torch.testing.assert_close(flipped["intrinsics"][0, 0, 2], width - sample["intrinsics"][0, 0, 2])
+    assert "intrinsics" not in Mp4WindowDataset(**config)[0]
 
 
 def test_hflip_mirrors_point_goals(tmp_path):
@@ -266,7 +312,7 @@ def test_prepare_dataset_keeps_final_context_target_and_provenance(tmp_path):
     destination = tmp_path / "prepared.npz"
     metadata = prepare_dataset(cfg, destination, limit=1)
     data, sidecar = load_archive(destination)
-    assert data["frames"].shape == (1, 3, 6, 24, 32)
+    assert data["vision"].shape == (1, 3, 3, 24, 32)
     assert data["targets"].shape == (1, 4, 2)
     np.testing.assert_allclose(data["target_times_s"], [3 / 16, 3 / 4, 27 / 16, 3])
     np.testing.assert_allclose(data["targets"][0, :, 0], data["target_times_s"])

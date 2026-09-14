@@ -3,8 +3,10 @@
     uv run visnavkit-export checkpoint=/path/last.ckpt output=policy.onnx
     uv run visnavkit-export checkpoint=null model=gnm  # untrained pipeline check
 
-Graph inputs are presence-driven: ``input``, ``feature_buffer``, then ``goal`` when the recipe has
-a goal encoder and ``noise`` for generative decoders. Outputs: ``plan``, ``pose``, ``feat_out``.
+Graph inputs are presence-driven: ``vision``, ``feature_buffer``, then one ``goal`` input per goal
+encoder, ``ego`` and ``intrinsics``/``extrinsics`` when the recipe consumes them, and ``noise``
+for generative decoders.
+Outputs: ``plan``, ``feat_out``, plus ``speed`` when the recipe enables the auxiliary speed head.
 """
 
 import copy
@@ -76,10 +78,17 @@ class _ExportPolicy(nn.Module):
         self.policy = policy
 
     def forward(self, *inputs):
-        names = self.policy.export_input_names()
-        kwargs = dict(zip(names, inputs))
+        kwargs = dict(zip(self.policy.export_input_names(), inputs))
+        goal_names = self.policy.goal_input_names()
+        goal = [kwargs[name] for name in goal_names] if len(goal_names) > 1 else kwargs.get("goal")
         return self.policy.predict(
-            kwargs["input"], kwargs["feature_buffer"], goal=kwargs.get("goal"), noise=kwargs.get("noise")
+            kwargs["vision"],
+            kwargs["feature_buffer"],
+            goal=goal,
+            ego=kwargs.get("ego"),
+            intrinsics=kwargs.get("intrinsics"),
+            extrinsics=kwargs.get("extrinsics"),
+            noise=kwargs.get("noise"),
         )
 
 
@@ -216,7 +225,9 @@ def export_policy(cfg, output, *, half=None, checkpoint=..., batch_size=1, opset
         outputs[0][:1], M=decoder.num_modes, num_pts=decoder.num_pts, pose_width=decoder.pose_size
     )
     print("=" * 40 + " SANITY CHECK " + "=" * 40)
-    print(f"speed: {float(np.asarray(outputs[1]).reshape(-1)[0]):.4f}")
+    if "speed" in output_names:
+        speed = outputs[output_names.index("speed")]
+        print(f"speed: {float(np.asarray(speed).reshape(-1)[0]):.4f}")
     print(f"logits: {np.round(parsed['pred_logits'], 3)}")
     print(f"best_plan p0: {np.round(parsed['best_plan'][0], 2)}")
     print(f"best_plan pN: {np.round(parsed['best_plan'][-1], 2)}")

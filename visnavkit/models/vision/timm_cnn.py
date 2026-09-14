@@ -27,7 +27,6 @@ class TimmCNNEncoder(BaseVisionEncoder):
         pretrained: bool = True,
         out_indices: tuple[int, ...] = (-3, -2, -1),
         act_layer: str | None = None,
-        pair_mode: str = "early",
         heads=None,
         **kwargs,
     ):
@@ -36,7 +35,7 @@ class TimmCNNEncoder(BaseVisionEncoder):
             raise ValueError("out_indices must select at least one backbone feature stage")
         backbone_kwargs = dict(
             pretrained=pretrained,
-            in_chans=6 if pair_mode == "early" else 3,
+            in_chans=3,
             num_classes=0,
             features_only=True,
             out_indices=out_indices,
@@ -50,7 +49,6 @@ class TimmCNNEncoder(BaseVisionEncoder):
         super().__init__(
             backbone,
             embed_dims[-1],
-            pair_mode=pair_mode,
             heads={name: instantiate(cfg, in_chs=embed_dims) for name, cfg in (heads or {}).items()},
             **kwargs,
         )

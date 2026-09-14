@@ -16,7 +16,7 @@ def write_fixture(path, cfg, *, samples=4, seed=42):
     rng = np.random.default_rng(seed)
     common = cfg.common
     h, w = int(common.crop_wh[1] // common.downscale_factor), int(common.crop_wh[0] // common.downscale_factor)
-    shape = (samples, int(common.seq_length), 6, h, w)
+    shape = (samples, int(common.seq_length), 3, h, w)
     frames = rng.integers(0, 256, size=shape, dtype=np.uint8)
     times = target_times(cfg).astype(np.float32)
     speed = np.linspace(0, 2, samples, dtype=np.float32)
@@ -27,7 +27,7 @@ def write_fixture(path, cfg, *, samples=4, seed=42):
         targets[..., 2] = speed[:, None]
     np.savez(
         path,
-        frames=frames,
+        vision=frames,
         targets=targets,
         target_times_s=times,
         current_speed=speed,

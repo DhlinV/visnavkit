@@ -23,7 +23,7 @@ def prepare_dataset(cfg, destination, limit=None):
     ``limit`` selects the first N valid windows in manifest order. If limit is None, all
     valid windows are included, subject to the 512 MiB uncompressed shard bound.
 
-    Files contain uint8 frames (N,S,6,H,W), targets (N,T,D), relative target_times_s (T,),
+    Files contain uint8 vision (N,S,3,H,W), targets (N,T,D), relative target_times_s (T,),
     current_speed (N,), and unique absolute-video-path:current-frame sample_ids (N,).
     """
     destination = Path(destination)
@@ -48,7 +48,7 @@ def prepare_dataset(cfg, destination, limit=None):
         raise ValueError("The validation manifest repeats observation windows; sample IDs must be unique")
 
     first = dataset[0]
-    frame_shape = tuple(first["frames"].shape)
+    frame_shape = tuple(first["vision"].shape)
     target_shape = tuple(first["future_poses"][-1].shape)
     target_times = first["target_times_s"].numpy().copy()
     estimated_bytes = (
@@ -66,11 +66,11 @@ def prepare_dataset(cfg, destination, limit=None):
     speed = np.empty(count, dtype=np.float32)
     for i in range(count):
         sample = first if i == 0 else dataset[i]
-        if tuple(sample["frames"].shape) != frame_shape or tuple(sample["future_poses"][-1].shape) != target_shape:
+        if tuple(sample["vision"].shape) != frame_shape or tuple(sample["future_poses"][-1].shape) != target_shape:
             raise ValueError("Prepared observations and targets must have consistent shapes across episodes")
         if not np.array_equal(sample["target_times_s"].numpy(), target_times):
             raise ValueError("Prepared episodes must share the same target anchor times")
-        frames[i] = sample["frames"].numpy()
+        frames[i] = sample["vision"].numpy()
         targets[i] = sample["future_poses"][-1].numpy()
         speed[i] = sample["frame_speeds"][-1].item()
 
@@ -104,13 +104,13 @@ def prepare_dataset(cfg, destination, limit=None):
         "coordinate_frame": "current robot ego frame; quaternion convention wxyz",
         "target_channels": ["x_m", "y_m", "speed_m_s"] if targets.shape[-1] == 3 else ["x_m", "y_m"],
         "target_times_s": target_times.tolist(),
-        "frames_shape": list(frames.shape),
+        "vision_shape": list(frames.shape),
         "augmentation": False,
     }
     destination.parent.mkdir(parents=True, exist_ok=True)
     np.savez(
         destination,
-        frames=frames,
+        vision=frames,
         targets=targets,
         target_times_s=target_times,
         current_speed=speed,

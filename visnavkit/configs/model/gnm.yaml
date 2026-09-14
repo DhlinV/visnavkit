@@ -1,4 +1,4 @@
-# GNM-style (arXiv:2210.03370): MobileNetV2 over the stacked frame pair, no temporal attention,
+# GNM-style (arXiv:2210.03370): MobileNetV2 frame encoder, no temporal attention,
 # image-goal encoder that stacks the current observation, deterministic waypoint regression.
 # Differences from the paper: fixed-horizon x/y/v targets, no temporal-distance head.
 defaults:

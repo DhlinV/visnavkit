@@ -5,12 +5,22 @@ import warnings
 import lightning as L
 import torch
 from hydra.utils import instantiate
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 
 from visnavkit.evaluation.calculators.base_calculator import MetricsCalculatorBase
 from visnavkit.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _to_device(value, device):
+    """Batch entries may be a tensor, a list of tensors (multi-goal policies), or missing."""
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        return [item.to(device, non_blocking=True) for item in value]
+    return value.to(device, non_blocking=True)
+
 
 # PyTorch bug that raises a false-positive warning
 # More info: https://github.com/Lightning-AI/litgpt/issues/1561
@@ -21,7 +31,7 @@ warnings.filterwarnings(
 
 
 def build_targets(batch, action_reduction="none"):
-    """Supervise every vision frame and either every action or the final decision.
+    """Supervise either every action or the final decision, plus optional per-frame vision targets.
 
     Reduced temporal features describe the complete observed window; their action
     target is the trajectory following its final frame.
@@ -30,9 +40,11 @@ def build_targets(batch, action_reduction="none"):
         raise ValueError(f"Unknown action reduction: {action_reduction}")
     future_poses = batch["future_poses"]
     targets = dict(
-        vision=dict(frame_speeds=batch["frame_speeds"].flatten(0, 1)),
+        vision={},
         action=dict(future_poses=future_poses.flatten(0, 1) if action_reduction == "none" else future_poses[:, -1]),
     )
+    if "frame_speeds" in batch:
+        targets["vision"]["frame_speeds"] = batch["frame_speeds"].flatten(0, 1)
 
     if "target_times_s" in batch:
         times = batch["target_times_s"]
@@ -46,7 +58,11 @@ def build_targets(batch, action_reduction="none"):
 
 def disable_pretrained_downloads(model_cfg: DictConfig) -> DictConfig:
     """Complete checkpoints carry every weight; skip backbone downloads and initialization files."""
-    for component in (model_cfg.vision_encoder, model_cfg.goal_encoder):
+    goal_cfg = model_cfg.get("goal_encoder")
+    goal_cfgs = list(goal_cfg) if isinstance(goal_cfg, ListConfig) else [goal_cfg]
+    for component in [model_cfg.vision_encoder, *goal_cfgs]:
+        if component is None:
+            continue
         if "pretrained" in component:
             component.pretrained = False
         if "weights" in component:
@@ -129,7 +145,7 @@ class LitModel(L.LightningModule):
 
     def _step(self, batch, batch_idx, stage: str):
         start_time = time.time()
-        x = batch["frames"]
+        x = batch["vision"]
         if x.dtype == torch.uint8:
             x = x.float().div(255.0)
         x = x.to(self.device, non_blocking=True)
@@ -139,11 +155,9 @@ class LitModel(L.LightningModule):
         targets = build_targets(batch, action_reduction=reduction)
         if reduction != "none":
             effective_batch_size = batch_size
-        goal = batch.get("goal")
-        if goal is not None:
-            goal = goal.to(self.device, non_blocking=True)
+        sides = {name: _to_device(batch.get(name), self.device) for name in ("goal", "ego", "intrinsics", "extrinsics")}
 
-        y_hat = self.model(x, goal=goal)
+        y_hat = self.model(x, **sides)
 
         loss_dict, loss_debug = self.model.get_losses(y_hat, targets)
 

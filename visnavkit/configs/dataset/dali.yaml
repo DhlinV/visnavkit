@@ -26,6 +26,8 @@ train_loader:
   downscale_factor: ${common.downscale_factor}
   goal_type: ${model.goal_encoder.goal_type}
   goal_horizon_s: ${common.goal_horizon_s}
+  ego_features: ${common.ego_features}
+  use_camera: ${common.use_camera}
   use_augs: true
   p_hflip: 0.5
   use_warp_perspective: false
@@ -57,6 +59,8 @@ val_loader:
   downscale_factor: ${common.downscale_factor}
   goal_type: ${model.goal_encoder.goal_type}
   goal_horizon_s: ${common.goal_horizon_s}
+  ego_features: ${common.ego_features}
+  use_camera: ${common.use_camera}
   use_augs: false
   p_hflip: 0.0
   use_warp_perspective: false

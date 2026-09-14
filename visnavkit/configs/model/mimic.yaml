@@ -1,4 +1,4 @@
-# MIMIC-style (arXiv:2603.22527): frame-pair encoder + causal transformer + multi-hypothesis
+# MIMIC-style (arXiv:2603.22527): frame encoder + causal transformer + multi-hypothesis
 # decoder, i.e. the base recipe. Multi-scale imitation and corrective behaviour expansion are
 # data/training strategies, not architecture. The paper's anchor decoder: action_decoder=anchor.
 defaults:

@@ -11,7 +11,7 @@ __all__ = ["ImageGoalEncoder"]
 class ImageGoalEncoder(BaseGoalEncoder):
     """Goal image ``(N, 3, H, W)`` (uint8 or [0, 1] float) encoded by its own timm backbone.
 
-    ``stack_observation=True`` concatenates the current observation with the goal image
+    ``stack_observation=True`` concatenates the current observation frame with the goal image
     (6-channel input) as in GNM / ViNT / NoMaD's goal encoders.
     """
 
@@ -56,7 +56,7 @@ class ImageGoalEncoder(BaseGoalEncoder):
         if self.stack_observation:
             if observation is None:
                 raise ValueError("stack_observation=True requires the current observation frame")
-            x = torch.cat([self.normalize(self._to_float(observation[:, 3:6])), x], dim=1)
+            x = torch.cat([self.normalize(self._to_float(observation)), x], dim=1)
         return self.proj(self.backbone(x))[:, None]
 
     def example_input(self, batch_size, device=None, image_hw=(64, 64)):

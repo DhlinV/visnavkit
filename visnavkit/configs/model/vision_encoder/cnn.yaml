@@ -6,5 +6,4 @@ _target_: visnavkit.models.vision.timm_cnn.TimmCNNEncoder
 backbone_name: resnet18
 out_indices: [-3, -2, -1]
 act_layer: null  # null keeps native activations (needed for pretrained CNNs); gelu_tanh for export-friendly GELU
-pair_mode: early  # early: 6-channel stacked pair; late: shared 3-channel backbone, concatenated embeddings
 freeze_backbone: false

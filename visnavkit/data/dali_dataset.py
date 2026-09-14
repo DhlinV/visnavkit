@@ -58,17 +58,15 @@ def _video_reader_and_frames(
     color_jitter_hue,
 ):
     """
-    DALI subgraph: decode video, augment, crop, pair consecutive frames, transpose to NCHW.
+    DALI subgraph: decode video, augment, crop, subsample the window, transpose to NCHW.
 
-    Returns ``(videos, label, start_frame_num, do_hflip)`` where ``videos`` is paired-frame
-    tensors for the rest of the training pipeline or vision-only consumers.
+    Returns ``(videos, label, start_frame_num, do_hflip)`` where ``videos`` is the observed
+    ``(S, 3, h, w)`` frame window for the rest of the training pipeline.
     """
-    # `sequence_length` is the final number of paired frames we want to output.
-    # DALI decodes this sequence with stride=frame_step, so adjacent decoded frames
-    # are `frame_step` source-video frames apart. We then build pairs from decoded
-    # indices (i, i + 1), where i = k * seq_step.
-    # max decoded index used is (sequence_length - 1) * seq_step + 1.
-    reader_sequence_length = (sequence_length - 1) * seq_step + 2
+    # `sequence_length` is the number of observed frames we want to output. DALI decodes with
+    # stride=frame_step, so adjacent decoded frames are `frame_step` source frames apart, and we
+    # keep decoded index i = k * seq_step; the largest one is (sequence_length - 1) * seq_step.
+    reader_sequence_length = (sequence_length - 1) * seq_step + 1
 
     videos, label, start_frame_num = fn.readers.video(  # pyright: ignore[reportGeneralTypeIssues]
         name="video_reader",
@@ -113,13 +111,8 @@ def _video_reader_and_frames(
         hue=color_jitter_hue if use_augs else 0.0,
     )
 
-    paired_frames = []
-    for k in range(sequence_length):
-        i = k * seq_step
-        f0 = fn.slice(videos, axes=[0], start=[i], shape=[1])
-        f1 = fn.slice(videos, axes=[0], start=[i + 1], shape=[1])
-        paired_frames.append(fn.cat(f0, f1, axis=3))
-    videos = fn.cat(*paired_frames, axis=0)
+    if seq_step > 1:
+        videos = fn.cat(*[fn.slice(videos, axes=[0], start=[k * seq_step], shape=[1]) for k in range(sequence_length)])
 
     # NHWC -> NCHW
     videos = fn.transpose(videos, perm=[0, 3, 1, 2])
@@ -224,6 +217,7 @@ class DaliDataset:
     ``reader_hflip`` from the video reader (clip id / debug); training usually ignores them.
     ``target_times_s`` has shape (B,T), relative seconds shared by all sequence frames.
     ``goal_type=point`` adds ``goal`` (B, S, 3); other goal types need the torch loader.
+    ``ego_features=[speed]`` adds ``ego`` (B, S, 1); richer ego status needs the torch loader.
     """
 
     def __init__(
@@ -253,6 +247,8 @@ class DaliDataset:
         frame_wh=(480, 270),
         goal_type="none",
         goal_horizon_s=(3.0, 15.0),
+        ego_features=(),
+        use_camera=False,
         # ---- augmentations ----
         use_augs=True,
         p_hflip=0.5,
@@ -275,8 +271,13 @@ class DaliDataset:
         if goal_type not in ("none", "point"):
             raise NotImplementedError(f"DaliDataset supports goal_type none/point; use dataset=torch for {goal_type!r}")
         self.goal_type = goal_type
+        if use_camera:
+            raise NotImplementedError("DaliDataset has no camera sidecars; use dataset=torch for use_camera=true")
+        self.ego_features = tuple(ego_features or ())
+        if self.ego_features not in ((), ("speed",)):
+            raise NotImplementedError(f"DaliDataset supports ego_features [] or [speed]; got {list(self.ego_features)}")
         if seq_len < 1:
-            raise ValueError(f"seq_len must be >= 1 (final paired length), got {seq_len}")
+            raise ValueError(f"seq_len must be >= 1 (observed window length), got {seq_len}")
         if seq_step < 1:
             raise ValueError(f"seq_step must be >= 1, got {seq_step}")
         if n_streams < 1:
@@ -388,7 +389,7 @@ class DaliDataset:
             pipe.build()
 
         self._output_map = [
-            "frames",
+            "vision",
             "frame_times_s",
             "future_poses",
             "frame_speeds",
@@ -416,6 +417,8 @@ class DaliDataset:
             ).expand(batch["future_poses"].shape[0], -1)
             if self.goal_type == "none":
                 batch.pop("goal")
+            if self.ego_features:
+                batch["ego"] = batch["frame_speeds"]
             yield batch
 
     def __len__(self):

@@ -35,7 +35,7 @@ relative paths resolved against `data_root` (`visnavkit/data/file_list.py`).
    ```bash
    uv run python -m visnavkit.scripts.benchmark_dataloader --batches 50 common.data_root=<root> dataset=<name>
    ```
-   Check the printed frames shape is `(B, S, 6, h, w)` uint8 and first-batch latency is sane.
+   Check the printed vision shape is `(B, S, 3, h, w)` uint8 and first-batch latency is sane.
 4. Spot-check targets: poses of a straight-driving clip should have y ~ 0 and v matching
    `frame_speeds`. Pose targets must come from `visnavkit/data/pose_targets.py` — never reimplement.
 5. Commit everything (file_lists too if they live in-repo), then train.

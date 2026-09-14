@@ -27,14 +27,12 @@ class VisionOutput(BaseOutput):
 
     Args:
         tokens: ``(N, K, D)`` decoder-ready tokens (``K`` = 1 global, patch grid, or 1 + grid).
-        pose: ``(N, 1)`` auxiliary speed regression.
-        prev_img_mask: ``(N,)`` False where the previous frame was dropped by augmentation.
+        speed: ``(N, 1)`` auxiliary speed regression, present only for recipes that enable it.
         heads: extra spatial-head outputs keyed by their export names.
     """
 
     tokens: torch.Tensor
-    pose: torch.Tensor
-    prev_img_mask: torch.Tensor
+    speed: torch.Tensor | None = None
     heads: dict | None = None
 
 
@@ -65,3 +63,5 @@ class PolicyOutput(BaseOutput):
     vision: VisionOutput
     plan: PlanOutput
     goal_tokens: torch.Tensor | None = None
+    ego_tokens: torch.Tensor | None = None
+    camera_tokens: torch.Tensor | None = None

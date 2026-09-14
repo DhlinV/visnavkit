@@ -1,0 +1,8 @@
+# Per-frame pinhole calibration: intrinsics (B, F, 3, 3) already adjusted for the dataset's crop
+# and downscale, extrinsics (B, F, 4, 4) camera-to-ego. The encoder normalizes the intrinsics by
+# the resolution the policy is running at, so the same weights transfer across resolutions.
+_target_: visnavkit.models.camera.pinhole.PinholeCameraEncoder
+feat_size: ${model.feat_size}
+hidden: 128
+num_tokens: 1
+p_drop: 0.0  # calibration dropout: also learn to act on clips with unknown calibration

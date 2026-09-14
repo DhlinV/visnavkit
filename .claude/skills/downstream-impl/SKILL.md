@@ -15,21 +15,23 @@ description: Implement downstream features in visnavkit (new components, dataset
 ### Batch (both dataloaders emit exactly this)
 | key | shape | dtype |
 |---|---|---|
-| `frames` | (B, S, 6, h, w) — prev+cur RGB pair | uint8 |
+| `vision` | (B, S, 3, h, w) — RGB frames | uint8 |
 | `future_poses` | (B, S, plan_len_points, 3) — x, y, v | float32 |
 | `frame_speeds` | (B, S, 1) | float32 |
 | `frame_times_s` | (B, S) | float64 |
 | `target_times_s` | (B, T) relative seconds | float32 |
-| `goal` (optional) | point (B, S, 3) · image (B, 3, h, w) uint8 · route_image (B, C, h, w) · instruction (B, E) | — |
+| `goal` (optional) | point (B, S, 3) · image (B, 3, h, w) uint8 · route_image (B, C, h, w) · instruction (B, E); a list when the recipe has several goal encoders | — |
+| `ego` (optional) | (B, S, E) — `common.ego_features` | float32 |
+| `intrinsics` / `extrinsics` (optional) | (B, S, 3, 3) / (B, S, 4, 4) — `common.use_camera` | float32 |
 
-`dataset=torch` (torchcodec, CPU) supports every goal type; `dataset=dali` (GPU) supports `none`/`point`. The dataset reads `goal_type` from `${model.goal_encoder.goal_type}`. Pose and goal targets come from `visnavkit/data/pose_targets.py` — reuse, never reimplement.
+`dataset=torch` (torchcodec, CPU) supports every goal type, goal lists, `common.ego_features` and `common.use_camera`; `dataset=dali` (GPU) supports `none`/`point` goals and speed-only ego. The dataset reads `goal_type` from `${model.goal_encoder.goal_type}` (set it explicitly when the recipe uses a list of goal encoders). Pose and goal targets come from `visnavkit/data/pose_targets.py` — reuse, never reimplement.
 
 ### Layout
 `models/vision` · `models/temporal` · `models/goal` · `models/action` (+ `denoisers/`, `schedulers/`) · `models/policy.py` (NavigationPolicy) · `models/lit_model.py` · `data/` · `evaluation/` · `benchmark/` · `scripts/` (thin entry points) · `configs/model/<group>/` mirrors the packages.
 
 ### Policy
-- Training: `policy(frames, goal=None, noise=None)` with frames (B, S, 6, h, w) float in [0,1] → `PolicyOutput(vision=VisionOutput(tokens (B*S, K, D), pose), plan=PlanOutput(plans (decisions, M*(2*T*P+1))), goal_tokens)`.
-- Deployment: `policy.predict(frame, feature_buffer, goal=None, noise=None)` → `(plan, pose, feat_out, *heads)`; `export_input_names()` / `export_output_names()` define the ONNX contract and are presence-driven (goal, noise).
+- Training: `policy(vision, goal=None, ego=None, intrinsics=None, extrinsics=None, noise=None)` with vision (B, S, 3, h, w) float in [0,1], ego (B, S, E), intrinsics (B, S, 3, 3), extrinsics (B, S, 4, 4) → `PolicyOutput(vision=VisionOutput(tokens (B*S, Kv, D), speed), plan=PlanOutput(plans (decisions, M*(2*T*P+1))), goal_tokens, ego_tokens, camera_tokens)`. Every non-vision input is optional and falls back to its encoder's null token.
+- Deployment: `policy.predict(frame, feature_buffer, goal=None, ego=None, intrinsics=None, extrinsics=None, noise=None)` — newest-frame side inputs carry no frame axis — → `(plan, feat_out, [speed], *heads)`; `export_input_names()` / `export_output_names()` define the ONNX contract and are presence-driven.
 - Losses: `policy.get_losses(out, targets)` combines `vision_encoder.get_losses` and `action_decoder.get_losses` with `loss_cfg` weights.
 
 ### Configs

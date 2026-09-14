@@ -4,15 +4,24 @@
 
 **A composable toolkit for visual navigation policies: train, export to ONNX, benchmark.**
 
-Every policy is the same four-stage pipeline. Each stage is a Hydra group, and every
-stage exchanges tokens of one width, so any encoder works with any goal and any decoder.
+Every policy takes the same inputs — **vision, goal, ego status, camera calibration** — and
+composes them from the same stages. Each stage is a Hydra group, and every stage exchanges
+tokens of one width, so any encoder works with any goal and any decoder.
 
 ```text
-video frames ──▶ vision encoder ──▶ temporal encoder ──▶ action decoder ──▶ trajectory
- (B, F, 6, H, W)   tokens (F, K, D)    context (K, D)   ▲     plans (M, T, pose)
-                                                        │
-                                          goal encoder ─┘  goal tokens (G, D), optional
+vision  (B, F, 3, H, W) ──▶ vision encoder ─┐
+ego     (B, F, E)       ──▶ ego encoder ────┤ per-frame
+K (B,F,3,3) RT (B,F,4,4)──▶ camera encoder ─┘ tokens (F, K, D)
+                                             │
+                                             ▼
+                                      temporal encoder ──▶ action decoder ──▶ trajectory
+                                        context (K, D)    ▲    plans (M, T, pose)
+                                                          │
+goal    (one per goal encoder) ──▶ goal encoder(s) ───────┘  goal tokens (G, D)
 ```
+
+Everything except vision is optional: an absent input falls back to that encoder's learned
+null token, so the same policy runs with or without it.
 
 [Architecture](docs/architecture.md) · [Benchmark guide](docs/benchmark.md) · [Model catalog](docs/models.md) · [Configs](visnavkit/configs/)
 
@@ -51,10 +60,12 @@ Pick one entry per group, or start from a recipe and override any group.
 | --- | --- |
 | `model/vision_encoder` | `cnn` or `vit` with any timm backbone, plus presets: `fastvit_t8`, `fastvit_t12`, `resnet18`, `resnet50`, `efficientnet_b0`, `mobilenetv2`, `mobilenetv3`, `mobilenetv4`, `convnext_tiny`, `convnextv2_nano`, `regnety_008`, `repvit_m1`, `efficientvit_b0`, `dinov2_s`, `dinov2_b`, `dinov3_s`, `dinov3_b`, `vit_s`, `deit_s`, `eva02_s`, `siglip_b`, `clip_b` |
 | `model/temporal_encoder` | `identity` (single frame), `causal`, `causal_4layer`, `bidirectional` |
-| `model/goal_encoder` | `none`, `point` (distance, cos, sin), `image`, `route_image`, `instruction` (text embedding) |
+| `model/goal_encoder` | `none`, `point` (distance, cos, sin), `image`, `route_image`, `instruction` (text embedding); set it to a **list** for several goals at once |
+| `model/ego_encoder` | `none`, `state` (free-form `(B, F, E)` ego vector) |
+| `model/camera_encoder` | `none`, `pinhole` (per-frame intrinsics + extrinsics) |
 | `model/action_decoder` | `regression`, `mhp`, `anchor`, `diffusion_mlp`, `diffusion_dit`, `diffusion_unet`, `flow_mlp`, `flow_dit`, `flow_unet`, `anchor_diffusion_dit`, `anchor_flow_dit` |
 
-Two more knobs cut across the groups:
+Three more knobs cut across the groups:
 
 - **Tokens per frame**: `model.vision_encoder.token_mode=global|patch|fused` with
   `patch_grid=[4,4]`. Global is one token per frame; patch and fused keep a pooled
@@ -63,6 +74,9 @@ Two more knobs cut across the groups:
   (ego-frame poses, or unicycle speed and yaw rate integrated back to poses), and
   `model.action_decoder.normalizer.mode=none|meanstd|minmax` with `stats_path` for
   normalized targets.
+- **Auxiliary speed head**: `model.vision_encoder.speed_head=true` regresses each frame's
+  speed. It is a per-recipe training signal, off by default, and adds a `speed` output to
+  the exported graph.
 
 ```bash
 uv run visnavkit-train dataset=torch model=vint \
@@ -80,7 +94,7 @@ layout per mode, so metrics, export, and the benchmark never change.
 ### Recipes
 
 Recipes named after papers are architecture adaptations to this repo's data contract
-(frame pairs, fixed-horizon x/y/v targets, goals sampled from the episode's own future),
+(single RGB frames, fixed-horizon x/y/v targets, goals sampled from the episode's own future),
 not reproductions or checkpoint-compatible replacements.
 
 | Recipe | Vision | Temporal | Goal | Decoder |
@@ -105,7 +119,17 @@ image goals are sampled from the clip's own future; route images and instruction
 embeddings come from optional `route_images.npy` and `instruction_embedding.npy` sidecars.
 The dataset reads the goal type from the selected goal encoder. Details: [benchmark guide](docs/benchmark.md#prepare-and-evaluate-real-data).
 
-`dataset=torch` decodes on CPU; `dataset=dali` decodes on GPU (point goals only).
+The other two inputs are opt-in:
+
+- `common.ego_features=[speed,yaw_rate]` packs those per-frame signals into `ego`; the
+  encoder is width-agnostic, so any dataset-defined vector works as long as
+  `model.ego_encoder.in_dim` matches.
+- `common.use_camera=true` reads `camera_intrinsics.npy` (3, 3) or (N, 3, 3) and
+  `camera_extrinsics.npy` (4, 4) or (N, 4, 4) camera-to-ego. The dataset shifts the
+  principal point by the crop, divides by the downscale, and mirrors it with a horizontal
+  flip, so the calibration always describes the image the policy sees.
+
+`dataset=torch` decodes on CPU; `dataset=dali` decodes on GPU (point goals, speed-only ego).
 
 ## Train, export, benchmark
 
@@ -120,10 +144,11 @@ Add `ema=default` to keep an exponential moving average of the weights (diffuser
 export then use the averaged policy. Training records Git provenance (`strict_git=true`
 requires a clean tree) and keeps experiment overrides in
 [`configs/experiment/`](visnavkit/configs/experiment/). The
-deployment graph takes `input`, `feature_buffer`, and, when the recipe needs them, `goal`
-and `noise`; it returns `plan`, `pose`, `feat_out`. Explicit noise makes generative
+deployment graph takes `vision`, `feature_buffer`, and, when the recipe needs them, one
+`goal` input per goal encoder, `ego`, `intrinsics`/`extrinsics`, and `noise`; it returns
+`plan`, `feat_out` and, with the auxiliary head, `speed`. Explicit noise makes generative
 policies deterministic and lets export verify parity. The benchmark exporter runs the
-full window instead and outputs `trajectories`, `scores`, `speed`.
+full window instead and outputs `trajectories`, `scores` (plus `speed`).
 
 ## Development
 
@@ -134,7 +159,8 @@ uv run python -m visnavkit.scripts.smoke_forward model=nomad
 ```
 
 Layout: [`models/vision`](visnavkit/models/vision/) · [`models/temporal`](visnavkit/models/temporal/) ·
-[`models/goal`](visnavkit/models/goal/) · [`models/action`](visnavkit/models/action/) ·
+[`models/goal`](visnavkit/models/goal/) · [`models/ego`](visnavkit/models/ego/) ·
+[`models/camera`](visnavkit/models/camera/) · [`models/action`](visnavkit/models/action/) ·
 [`models/policy.py`](visnavkit/models/policy.py) · [`data/`](visnavkit/data/) ·
 [`benchmark/`](visnavkit/benchmark/) · [`evaluation/`](visnavkit/evaluation/) · [`scripts/`](visnavkit/scripts/)
 

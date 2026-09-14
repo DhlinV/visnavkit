@@ -1,4 +1,4 @@
-# Shared token projection and auxiliary speed supervision for every vision encoder.
+# Shared token projection and optional auxiliary heads for every vision encoder.
 _recursive_: false
 feat_size: ${model.feat_size}
 token_mode: global  # global | patch | fused
@@ -7,9 +7,11 @@ pretrained: true
 weights: null
 img_embed_size: 1024
 img_embed_drop: 0.1
-p_drop_prev_img: 0.1
 neck_cfg:
   n_res_blocks: 2
   dropout: 0.1
-loss_pose_weight: 5
+# Auxiliary per-frame speed regression: a model-specific training signal, not part of the
+# policy contract. Recipes that want it set speed_head: true and get a `speed` export output.
+speed_head: false
+loss_speed_weight: 5
 heads: {}

@@ -16,9 +16,13 @@ from visnavkit.data.pose_targets import (
     sample_goal_frame,
     target_safe_frame_ranges,
 )
-from visnavkit.utils.common import build_idxs
+from visnavkit.utils.common import build_idxs, load_npy
+from visnavkit.utils.orientation import yaw_from_quat
 
 GOAL_TYPES = ("none", "point", "image", "route_image", "instruction")
+EGO_FEATURES = ("speed", "yaw_rate")
+CAMERA_INTRINSICS = "camera_intrinsics.npy"
+CAMERA_EXTRINSICS = "camera_extrinsics.npy"
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +30,24 @@ logger = logging.getLogger(__name__)
 class Mp4WindowDataset(Dataset):
     """
     Torch counterpart of DaliDataset: consumes the same ``path label start end`` file_list,
-    enumerates fixed windows every ``steps_between_samples`` frames, decodes paired frames with
-    torchcodec, and emits the same batch keys (``frames`` uint8 (S, 6, h, w), ``frame_times_s``,
+    enumerates fixed windows every ``steps_between_samples`` frames, decodes frames with
+    torchcodec, and emits the same batch keys (``vision`` uint8 (S, 3, h, w), ``frame_times_s``,
     ``future_poses``, ``frame_speeds``, ``target_times_s``). Target times are relative
     seconds, shape (T,) per sample and (B,T) after collation; all S frames share them.
 
-    ``goal_type`` adds a ``goal`` key: ``point`` (S, 3) distance/cos/sin of a future frame sampled
-    ``goal_horizon_s`` seconds ahead, ``image`` (3, h, w) uint8 crop of that frame, ``route_image``
-    (3, h, w) from the episode's ``route_images.npy`` (N, h, w, 3) sidecar indexed by the current
-    frame, or ``instruction`` (E,) from ``instruction_embedding.npy``.
+    ``goal_type`` adds a ``goal`` key, and may be a list of types for policies with several goal
+    encoders (``goal`` is then a list in the same order): ``point`` (S, 3) distance/cos/sin of a
+    future frame sampled ``goal_horizon_s`` seconds ahead, ``image`` (3, h, w) uint8 crop of that
+    frame, ``route_image`` (3, h, w) from the episode's ``route_images.npy`` (N, h, w, 3) sidecar
+    indexed by the current frame, or ``instruction`` (E,) from ``instruction_embedding.npy``.
+
+    ``ego_features`` adds an ``ego`` key (S, E) with the per-frame ego status; ``speed`` reads
+    ``frame_speeds.npy`` and ``yaw_rate`` differentiates the frame orientations.
+
+    ``use_camera`` adds ``intrinsics`` (S, 3, 3) and ``extrinsics`` (S, 4, 4) from the episode's
+    ``camera_intrinsics.npy`` / ``camera_extrinsics.npy`` sidecars (either one matrix for the
+    clip or one per frame). The intrinsics are adjusted for the crop and downscale, and mirrored
+    with the frames on a horizontal flip, so they describe the image the policy actually sees.
     """
 
     def __init__(
@@ -54,6 +67,8 @@ class Mp4WindowDataset(Dataset):
         downscale_factor=4,
         goal_type="none",
         goal_horizon_s=(3.0, 15.0),
+        ego_features=(),
+        use_camera=False,
         # ---- augmentations (hflip + color jitter only; warp/jitter are DALI-only) ----
         use_augs=False,
         p_hflip=0.5,
@@ -69,9 +84,17 @@ class Mp4WindowDataset(Dataset):
         self.frame_step = frame_step
         self.seq_step = seq_step
         self.use_full_pose = use_full_pose
-        if goal_type not in GOAL_TYPES:
-            raise ValueError(f"goal_type must be one of {GOAL_TYPES}, got {goal_type!r}")
-        self.goal_type = goal_type
+        self.goal_types = [goal_type] if isinstance(goal_type, str) else list(goal_type)
+        for name in self.goal_types:
+            if name not in GOAL_TYPES:
+                raise ValueError(f"goal_type must be one of {GOAL_TYPES}, got {name!r}")
+        self.goal_is_list = not isinstance(goal_type, str)
+        self.ego_features = tuple(ego_features or ())
+        for name in self.ego_features:
+            if name not in EGO_FEATURES:
+                raise ValueError(f"ego_features must be from {EGO_FEATURES}, got {name!r}")
+        self.use_camera = bool(use_camera)
+        self.downscale_factor = downscale_factor
         self.goal_horizon_s = tuple(float(v) for v in goal_horizon_s)
         self.p_hflip = p_hflip if use_augs else 0.0
         for name, value in {
@@ -99,9 +122,9 @@ class Mp4WindowDataset(Dataset):
         jitter = (color_jitter_brightness, color_jitter_contrast, color_jitter_saturation, color_jitter_hue)
         self.color_jitter = v2.ColorJitter(*jitter) if use_augs and any(v > 0 for v in jitter) else None
 
-        # Same span as the DALI reader: reader_seq_len = (seq_len - 1) * seq_step + 2 decoded
-        # frames with stride=frame_step, windows every steps_between_samples source frames.
-        span = ((seq_len - 1) * seq_step + 1) * frame_step + 1
+        # Same span as the DALI reader: seq_len frames strided by seq_step * frame_step source
+        # frames, with windows starting every steps_between_samples source frames.
+        span = (seq_len - 1) * seq_step * frame_step + 1
         self.windows: list[tuple[str, int]] = []
         rows = parse_file_list_frame_ranges(self.file_list, data_root=self.data_root)
         safe_rows = target_safe_frame_ranges(rows, float(self.t_anchors[-1]))
@@ -119,20 +142,16 @@ class Mp4WindowDataset(Dataset):
         positions, orientations, speeds, times_s = load_pose_arrays(sample_dir)
         seq_idxs = get_current_frame_idxs(start_idx, self.frame_step, self.seq_step, self.seq_len)
         goal_idx = None
-        if self.goal_type in ("point", "image"):
+        if {"point", "image"} & set(self.goal_types):
             goal_idx = sample_goal_frame(times_s, seq_idxs[-1], self.goal_horizon_s, f"{video_fp}:{start_idx}")
 
-        pair_starts = [start_idx + k * self.seq_step * self.frame_step for k in range(self.seq_len)]
-        frame_idxs = [i for p in pair_starts for i in (p, p + self.frame_step)]
         decoder = VideoDecoder(video_fp, device="cpu", dimension_order="NCHW")
-        decode_idxs = frame_idxs + ([goal_idx] if self.goal_type == "image" else [])
-        decoded = decoder.get_frames_at(indices=decode_idxs).data  # uint8 (2S[+1], 3, H, W)
+        decode_idxs = list(seq_idxs) + ([goal_idx] if "image" in self.goal_types else [])
+        decoded = decoder.get_frames_at(indices=decode_idxs).data  # uint8 (S[+1], 3, H, W)
         decoded = decoded[..., self.crop_slice_h, self.crop_slice_w]
         if self.color_jitter is not None:
             decoded = self.color_jitter(decoded)
-        frames = torch.cat(
-            [decoded[0 : 2 * self.seq_len : 2], decoded[1 : 2 * self.seq_len : 2]], dim=1
-        )  # (S, 6, h, w)
+        frames = decoded[: self.seq_len]  # (S, 3, h, w)
 
         future_poses, _ = get_future_poses(
             positions,
@@ -146,35 +165,79 @@ class Mp4WindowDataset(Dataset):
             strict=True,
             interp_to_end=False,
         )
-        goal = self._goal(sample_dir, positions, orientations, seq_idxs, goal_idx, decoded)
+        goals = [
+            self._goal(kind, sample_dir, positions, orientations, seq_idxs, goal_idx, decoded)
+            for kind in self.goal_types
+        ]
 
-        if torch.rand(1) < self.p_hflip:
+        flip = bool(torch.rand(1) < self.p_hflip)
+        if flip:
             frames = torch.flip(frames, dims=[-1])
             future_poses[..., 1] *= -1.0
-            if self.goal_type == "point":
-                goal[:, 2] *= -1.0
-            elif self.goal_type in ("image", "route_image"):
-                goal = torch.flip(goal, dims=[-1])
+        goals = [self._flip_goal(kind, goal) if flip else goal for kind, goal in zip(self.goal_types, goals)]
 
         sample = dict(
-            frames=frames,
+            vision=frames,
             frame_times_s=torch.tensor(np.asarray(times_s[seq_idxs]), dtype=torch.float64),
             future_poses=torch.from_numpy(future_poses),
             target_times_s=torch.tensor(self.t_anchors, dtype=torch.float32),
             frame_speeds=torch.tensor(np.asarray(speeds[seq_idxs]), dtype=torch.float32).reshape(-1, 1),
         )
-        if goal is not None:
-            sample["goal"] = goal
+        present = [goal for goal in goals if goal is not None]
+        if present:
+            sample["goal"] = present if self.goal_is_list else present[0]
+        if self.ego_features:
+            sample["ego"] = self._ego(orientations, speeds, times_s, seq_idxs, flip)
+        if self.use_camera:
+            sample["intrinsics"], sample["extrinsics"] = self._camera(sample_dir, seq_idxs, frames.shape[-1], flip)
         return sample
 
-    def _goal(self, sample_dir, positions, orientations, seq_idxs, goal_idx, decoded):
-        if self.goal_type == "none":
+    def _camera(self, sample_dir, seq_idxs, width, flip):
+        """Per-frame calibration for the cropped, downscaled and possibly mirrored frames."""
+        intrinsics = np.asarray(load_npy(sample_dir / CAMERA_INTRINSICS), dtype=np.float32)
+        extrinsics = np.asarray(load_npy(sample_dir / CAMERA_EXTRINSICS), dtype=np.float32)
+        intrinsics = intrinsics[seq_idxs] if intrinsics.ndim == 3 else np.repeat(intrinsics[None], len(seq_idxs), 0)
+        extrinsics = extrinsics[seq_idxs] if extrinsics.ndim == 3 else np.repeat(extrinsics[None], len(seq_idxs), 0)
+        if intrinsics.shape[1:] != (3, 3) or extrinsics.shape[1:] != (4, 4):
+            raise ValueError("camera_intrinsics.npy must be (3,3)/(N,3,3) and camera_extrinsics.npy (4,4)/(N,4,4)")
+        intrinsics = intrinsics.copy()
+        # Principal point follows the crop, then the whole matrix follows the downscale.
+        intrinsics[:, 0, 2] -= self.crop_slice_w.start * self.downscale_factor
+        intrinsics[:, 1, 2] -= self.crop_slice_h.start * self.downscale_factor
+        intrinsics[:, :2] /= self.downscale_factor
+        if flip:  # mirroring the image mirrors the x axis of the image plane
+            intrinsics[:, 0, 2] = width - intrinsics[:, 0, 2]
+        return torch.from_numpy(intrinsics), torch.from_numpy(extrinsics.copy())
+
+    def _ego(self, orientations, speeds, times_s, seq_idxs, flip):
+        """Per-frame ego status ``(S, E)``; the encoder only needs the width, not the meanings."""
+        columns = []
+        for name in self.ego_features:
+            if name == "speed":
+                columns.append(np.asarray(speeds[seq_idxs], dtype=np.float32))
+            else:
+                yaw = yaw_from_quat(np.asarray(orientations))
+                rate = np.gradient(np.unwrap(yaw), np.asarray(times_s, dtype=np.float64))
+                columns.append(np.asarray(rate[seq_idxs] * (-1.0 if flip else 1.0), dtype=np.float32))
+        return torch.from_numpy(np.stack(columns, axis=-1))
+
+    def _flip_goal(self, kind, goal):
+        if goal is None:
             return None
-        if self.goal_type == "point":
+        if kind == "point":
+            goal[:, 2] *= -1.0
+        elif kind in ("image", "route_image"):
+            goal = torch.flip(goal, dims=[-1])
+        return goal
+
+    def _goal(self, kind, sample_dir, positions, orientations, seq_idxs, goal_idx, decoded):
+        if kind == "none":
+            return None
+        if kind == "point":
             return torch.from_numpy(goal_point_targets(positions, orientations, seq_idxs, goal_idx))
-        if self.goal_type == "image":
+        if kind == "image":
             return decoded[-1]
-        if self.goal_type == "route_image":
+        if kind == "route_image":
             routes = np.load(sample_dir / "route_images.npy", mmap_mode="r")
             return torch.from_numpy(np.ascontiguousarray(routes[seq_idxs[-1]])).permute(2, 0, 1)
         return torch.from_numpy(

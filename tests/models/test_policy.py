@@ -1,4 +1,4 @@
-"""Policy composition across training, feature-buffer deployment, goals, and partial training."""
+"""Policy composition across training, feature-buffer deployment, goals, ego status, freezing."""
 
 import pytest
 import torch
@@ -73,6 +73,9 @@ def policy_config(
     seq_step=1,
     token_mode="global",
     kind="waypoint",
+    ego=False,
+    camera=False,
+    speed_head=False,
 ):
     return OmegaConf.create(
         {
@@ -91,7 +94,7 @@ def policy_config(
                 "patch_grid": [2, 2],
                 "img_embed_size": 16,
                 "img_embed_drop": 0,
-                "p_drop_prev_img": 0,
+                "speed_head": speed_head,
                 "neck_cfg": {"n_res_blocks": 0, "dropout": 0},
             },
             "temporal_encoder": {
@@ -105,7 +108,21 @@ def policy_config(
                 "reduction": reduction,
                 **({"num_layers": 0} if temporal == "identity" else {}),
             },
-            "goal_encoder": {"feat_size": 8, **GOAL[goal]},
+            "goal_encoder": (
+                [{"feat_size": 8, **GOAL[name]} for name in goal]
+                if isinstance(goal, list)
+                else {"feat_size": 8, **GOAL[goal]}
+            ),
+            "ego_encoder": (
+                {"_target_": "visnavkit.models.ego.state.EgoStateEncoder", "feat_size": 8, "in_dim": 2, "hidden": 16}
+                if ego
+                else {"_target_": "visnavkit.models.ego.none.NoEgoEncoder", "feat_size": 8}
+            ),
+            "camera_encoder": (
+                {"_target_": "visnavkit.models.camera.pinhole.PinholeCameraEncoder", "feat_size": 8, "hidden": 16}
+                if camera
+                else {"_target_": "visnavkit.models.camera.none.NoCameraEncoder", "feat_size": 8}
+            ),
             "action_decoder": {
                 "feat_size": 8,
                 "action_space": {
@@ -121,93 +138,172 @@ def policy_config(
     )
 
 
-def synthetic_goal(model, batch, frames, image_hw=(32, 32)):
-    encoder = model.goal_encoder
-    if encoder.num_tokens == 0:
-        return None
-    if encoder.per_frame:
-        return encoder.example_input(batch * frames, image_hw=image_hw).reshape(batch, frames, -1)
-    return encoder.example_input(batch, image_hw=image_hw)
-
-
 @pytest.mark.parametrize(
-    "temporal, goal, decoder, reduction, token_mode",
+    "temporal, goal, decoder, reduction, token_mode, ego, camera",
     [
-        ("causal", "none", "mhp", "none", "global"),
-        ("causal", "point", "regression", "none", "fused"),
-        ("bidirectional", "image", "flow_dit", "last", "patch"),
-        ("identity", "instruction", "anchor", "last", "global"),
-        ("causal", "point", "diffusion_unet", "none", "global"),
+        ("causal", "none", "mhp", "none", "global", False, False),
+        ("causal", "point", "regression", "none", "fused", True, False),
+        ("bidirectional", "image", "flow_dit", "last", "patch", False, True),
+        ("identity", "instruction", "anchor", "last", "global", True, True),
+        ("causal", "point", "diffusion_unet", "none", "global", False, False),
+        ("causal", ["point", "image", "none"], "mhp", "last", "global", True, True),
     ],
 )
-def test_policy_trains_end_to_end(temporal, goal, decoder, reduction, token_mode):
+def test_policy_trains_end_to_end(temporal, goal, decoder, reduction, token_mode, ego, camera):
     torch.manual_seed(31)
-    model = instantiate(policy_config(temporal, goal, decoder, reduction=reduction, token_mode=token_mode)).train()
-    source = torch.rand(3, 2, 6, 32, 32, requires_grad=True)
-    frames = source.transpose(0, 1)  # noncontiguous (B=2, F=3)
-    goal_batch = synthetic_goal(model, 2, 3)
-    out = model(frames, goal=goal_batch)
+    model = instantiate(
+        policy_config(
+            temporal,
+            goal,
+            decoder,
+            reduction=reduction,
+            token_mode=token_mode,
+            ego=ego,
+            camera=camera,
+            speed_head=True,
+        )
+    ).train()
+    vision, goal_batch, ego_batch, intrinsics, extrinsics = model.example_batch(2, 3, (32, 32))
+    vision.requires_grad_(True)
+    out = model(vision, goal=goal_batch, ego=ego_batch, intrinsics=intrinsics, extrinsics=extrinsics)
     decisions = 6 if reduction == "none" else 2
+    goal_names = goal if isinstance(goal, list) else [goal]
+    expected_goal_tokens = sum(name != "none" for name in goal_names)
     targets = {"vision": {"frame_speeds": torch.rand(6, 1)}, "action": {"future_poses": torch.rand(decisions, 3, 3)}}
     losses, debug = model.get_losses(out, targets)
-    assert out.vision.pose.shape == (6, 1)
-    assert out.vision.tokens.shape == (6, model.num_tokens, 8)
+    assert out.vision.speed.shape == (6, 1)
+    assert out.vision.tokens.shape == (6, model.vision_tokens, 8)
+    assert model.num_tokens == model.vision_tokens + (1 if ego else 0) + (1 if camera else 0)
+    assert (out.ego_tokens is None) == (not ego)
+    assert (out.camera_tokens is None) == (not camera)
+    assert out.goal_tokens is None or out.goal_tokens.shape == (decisions, expected_goal_tokens, 8)
+    assert (out.goal_tokens is None) == (expected_goal_tokens == 0)
     assert out.plan.plans.shape == (decisions, model.action_decoder.flat_size)
     assert debug["action_loss_debug"]["imitation_loss_per_sample"].shape == (decisions,)
     assert all(torch.isfinite(v).all() for v in losses.values())
     losses["loss"].backward()
-    assert source.grad is not None and torch.isfinite(source.grad).all() and source.grad.abs().sum() > 0
-    if goal != "none" and decoder != "flow_dit":  # DiT adaLN-Zero gates start at zero, so upstream gradients do too
-        assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.goal_encoder.parameters())
+    assert vision.grad is not None and torch.isfinite(vision.grad).all() and vision.grad.abs().sum() > 0
+    if expected_goal_tokens and decoder != "flow_dit":  # DiT adaLN-Zero gates start at zero, so gradients do too
+        assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.goal_encoders.parameters())
 
 
 @pytest.mark.parametrize(
-    "temporal, goal, decoder, reduction, seq_len, seq_step",
+    "temporal, goal, decoder, reduction, seq_len, seq_step, ego, camera",
     [
-        ("causal", "none", "mhp", "last", 3, 2),
-        ("causal", "point", "regression", "none", 3, 2),
-        ("bidirectional", "image", "flow_dit", "last", 3, 1),
-        ("identity", "instruction", "anchor", "last", 1, 1),
-        ("bidirectional", "none", "regression", "avg", 3, 2),
+        ("causal", "none", "mhp", "last", 3, 2, False, False),
+        ("causal", "point", "regression", "none", 3, 2, True, False),
+        ("bidirectional", "image", "flow_dit", "last", 3, 1, False, True),
+        ("identity", "instruction", "anchor", "last", 1, 1, True, True),
+        ("bidirectional", "none", "regression", "avg", 3, 2, False, False),
+        ("causal", ["point", "image"], "mhp", "last", 3, 1, True, True),
     ],
 )
-def test_feature_buffer_matches_full_observation_window(temporal, goal, decoder, reduction, seq_len, seq_step):
+def test_feature_buffer_matches_full_observation_window(
+    temporal, goal, decoder, reduction, seq_len, seq_step, ego, camera
+):
     torch.manual_seed(32)
     model = instantiate(
         policy_config(
-            temporal, goal, decoder, reduction=reduction, seq_len=seq_len, seq_step=seq_step, token_mode="fused"
+            temporal,
+            goal,
+            decoder,
+            reduction=reduction,
+            seq_len=seq_len,
+            seq_step=seq_step,
+            token_mode="fused",
+            ego=ego,
+            camera=camera,
+            speed_head=True,
         )
     ).eval()
     history = (seq_len - 1) * seq_step
-    frames = torch.rand(2, history + 1, 6, 32, 32)
-    window = frames[:, ::seq_step]
-    goal_batch = synthetic_goal(model, 2, seq_len)
+    dense, goal_batch, ego_batch, intrinsics, extrinsics = model.example_batch(2, history + 1, (32, 32))
+    window = dense[:, ::seq_step]
+    goals = goal_batch if isinstance(goal_batch, list) else [goal_batch]
+    window_goals = [
+        None if g is None else (g[:, ::seq_step] if e.per_frame else g) for e, g in zip(model.goal_encoders, goals)
+    ]
+    newest = [None if g is None else (g[:, -1] if e.per_frame else g) for e, g in zip(model.goal_encoders, goals)]
+    if not isinstance(goal_batch, list):
+        window_goals, newest = window_goals[0], newest[0]
     noise = model.action_decoder.example_noise(2) if model.action_decoder.uses_noise else None
+    goal_names = goal if isinstance(goal, list) else [goal]
+    live = [name for name in goal_names if name != "none"]
     with torch.no_grad():
-        encoded = model.encode_frames(frames).tokens.reshape(2, history + 1, model.token_dim)
-        full = model(window, goal=goal_batch, noise=noise)
+        encoded = model._per_frame_tokens(
+            model.encode_frames(dense).tokens.reshape(2, history + 1, model.vision_tokens, 8),
+            model.encode_ego(ego_batch, 2, history + 1),
+            model.encode_camera(intrinsics, extrinsics, 2, history + 1, (32, 32)),
+            dim=2,
+        ).flatten(2)
+        strided = {
+            "ego": None if not ego else ego_batch[:, ::seq_step],
+            "intrinsics": None if not camera else intrinsics[:, ::seq_step],
+            "extrinsics": None if not camera else extrinsics[:, ::seq_step],
+        }
+        full = model(window, goal=window_goals, **strided, noise=noise)
         expected = full.plan.plans if reduction != "none" else full.plan.plans.reshape(2, seq_len, -1)[:, -1]
-        last_goal = None if goal_batch is None else (goal_batch[:, -1] if model.goal_encoder.per_frame else goal_batch)
-        plan, pose, token = model.predict(frames[:, -1], encoded[:, :-1], goal=last_goal, noise=noise)
-    assert model.export_output_names() == ["plan", "pose", "feat_out"]
-    assert model.export_input_names() == ["input", "feature_buffer"] + (["goal"] if goal != "none" else []) + (
-        ["noise"] if noise is not None else []
-    )
+        plan, token, speed = model.predict(
+            dense[:, -1],
+            encoded[:, :-1],
+            goal=newest,
+            ego=None if not ego else ego_batch[:, -1],
+            intrinsics=None if not camera else intrinsics[:, -1],
+            extrinsics=None if not camera else extrinsics[:, -1],
+            noise=noise,
+        )
+    assert model.export_output_names() == ["plan", "feat_out", "speed"]
+    goal_inputs = ["goal"] if len(live) == 1 else [f"goal_{i}" for i in range(len(live))]
+    assert model.export_input_names() == ["vision", "feature_buffer", *goal_inputs] + (["ego"] if ego else []) + (
+        ["intrinsics", "extrinsics"] if camera else []
+    ) + (["noise"] if noise is not None else [])
     torch.testing.assert_close(plan, expected, atol=2e-5, rtol=2e-4)
-    torch.testing.assert_close(pose, full.vision.pose.reshape(2, seq_len, 1)[:, -1])
+    torch.testing.assert_close(speed, full.vision.speed.reshape(2, seq_len, 1)[:, -1])
     torch.testing.assert_close(token, encoded[:, -1])
 
 
 def test_goal_shape_validation_and_null_goal():
     model = instantiate(policy_config("causal", "point", "regression")).eval()
-    frames = torch.rand(2, 3, 6, 32, 32)
+    frames = torch.rand(2, 3, 3, 32, 32)
     with pytest.raises(ValueError, match="per-frame goals"):
         model(frames, goal=torch.zeros(2, 4, 3))
     out = model(frames)  # missing goal -> learned null token
     assert out.goal_tokens.shape == (6, 1, 8)
+    torch.testing.assert_close(out.goal_tokens, model.null_goal_tokens(6))
     image = instantiate(policy_config("bidirectional", "image", "regression", reduction="last")).eval()
     with pytest.raises(ValueError, match="one goal per window"):
         image(frames, goal=torch.rand(3, 3, 32, 32))
+    pair = instantiate(policy_config("causal", ["point", "image"], "regression", reduction="last")).eval()
+    with pytest.raises(ValueError, match="2 goal encoders expect 2 goals"):
+        pair(frames, goal=torch.zeros(2, 3, 3))
+
+
+def test_camera_validation_and_null_token():
+    model = instantiate(policy_config("causal", "none", "regression", reduction="last", camera=True)).eval()
+    frames = torch.rand(2, 3, 3, 32, 32)
+    assert model.camera_tokens == 1 and model.num_tokens == model.vision_tokens + 1
+    with pytest.raises(ValueError, match=r"Intrinsics must be \(B, F, 3, 3\)"):
+        model(frames, intrinsics=torch.eye(3).repeat(2, 3, 1, 1)[..., :2], extrinsics=torch.eye(4).repeat(2, 3, 1, 1))
+    out = model(frames)  # missing calibration -> learned null token
+    torch.testing.assert_close(out.camera_tokens, model.camera_encoder.null_token.repeat(2, 3, 1, 1))
+    # Intrinsics are normalized by the live frame size, so the same K at twice the resolution
+    # (and twice the focal length / principal point) yields the same tokens.
+    small = model.camera_encoder.example_input(2, 3, (32, 32))
+    large = model.camera_encoder.example_input(2, 3, (64, 64))
+    torch.testing.assert_close(
+        model(frames, intrinsics=small[0], extrinsics=small[1]).camera_tokens,
+        model(torch.rand(2, 3, 3, 64, 64), intrinsics=large[0], extrinsics=large[1]).camera_tokens,
+    )
+
+
+def test_ego_status_validation_and_null_token():
+    model = instantiate(policy_config("causal", "none", "regression", reduction="last", ego=True)).eval()
+    frames = torch.rand(2, 3, 3, 32, 32)
+    assert model.ego_tokens == 1 and model.num_tokens == model.vision_tokens + 1
+    with pytest.raises(ValueError, match=r"\(B, F, 2\)"):
+        model(frames, ego=torch.zeros(2, 3, 5))
+    out = model(frames)  # missing ego status -> learned null token
+    torch.testing.assert_close(out.ego_tokens, model.ego_encoder.null_token.repeat(2, 3, 1, 1))
 
 
 def test_partial_training_uses_module_prefixes():
@@ -230,10 +326,8 @@ def test_partial_training_uses_module_prefixes():
 
 def test_velocity_action_space_end_to_end():
     model = instantiate(policy_config(decoder="regression", kind="velocity")).train()
-    out = model(torch.rand(2, 3, 6, 32, 32))
-    losses, _ = model.get_losses(
-        out, {"vision": {"frame_speeds": torch.rand(6, 1)}, "action": {"future_poses": torch.rand(6, 3, 3)}}
-    )
+    out = model(torch.rand(2, 3, 3, 32, 32))
+    losses, _ = model.get_losses(out, {"vision": {}, "action": {"future_poses": torch.rand(6, 3, 3)}})
     losses["loss"].backward()
     parsed = model.action_decoder.parse_output(out.plan.plans)
     assert parsed["plans"].shape == (6, 1, 3, 3)
@@ -251,6 +345,7 @@ def test_training_targets_follow_action_reduction(reduction, shared_times):
         {"future_poses": future_poses, "frame_speeds": speeds, "target_times_s": times}, action_reduction=reduction
     )
     torch.testing.assert_close(targets["vision"]["frame_speeds"], speeds.flatten(0, 1))
+    assert build_targets({"future_poses": future_poses}, action_reduction=reduction)["vision"] == {}
     torch.testing.assert_close(
         targets["action"]["future_poses"], future_poses.flatten(0, 1) if reduction == "none" else future_poses[:, -1]
     )
