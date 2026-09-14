@@ -11,13 +11,14 @@ encoder x temporal encoder x goal encoder x action decoder — purely via yaml
 
 | recipe | vision | temporal | goal | action decoder |
 |---|---|---|---|---|
-| base / mimic | fastvit_t8 (pair-stacked) | causal x1 | none | mhp |
+| base | fastvit_t8 (pair-stacked) | causal x1 | none | mhp |
+| mimic | dinov3_s | causal x4 (512-d) | point p_drop 0.5 + camera | anchor (64) |
 | resnet18 | resnet18 | identity | none | regression |
 | gnm | mobilenetv2 | identity | image (stack_observation) | regression |
-| vint | efficientnet_b0 | causal_4layer | image (stack_observation) | regression |
-| nomad | efficientnet_b0 | causal_4layer | image, p_drop 0.5 | diffusion_unet |
-| citywalker | dinov2_s (frozen) | causal_4layer | point | regression |
-| s2e | dinov3_s (frozen) | causal x1 | point, p_drop 0.5 | mhp |
+| vint | efficientnet_b0 | causal_4layer (512-d) | image (stack_observation) | regression |
+| nomad | efficientnet_b0 | causal_4layer (256-d) | image, p_drop 0.5 | diffusion_unet, 10 steps |
+| citywalker | dinov2_b (frozen) | causal x16 (768-d) | point + ego past_xy | regression |
+| s2e | efficientnet_b0 | causal_4layer (768-d) | point, p_drop 0.5 | anchor (8) |
 | dinov2 / dinov3 | DINO ViT-S (frozen) | causal x1 | none | mhp |
 | diffusion / flow_dit / anchor | fastvit_t8 | causal x1 | none | diffusion_mlp / flow_dit / anchor |
 

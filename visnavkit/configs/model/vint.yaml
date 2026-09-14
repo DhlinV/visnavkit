@@ -1,5 +1,6 @@
 # ViNT-style (arXiv:2306.14846): EfficientNet-B0 frame encoder, 4-layer transformer over the
-# window, image-goal token (observation + goal stacked), deterministic waypoint regression.
+# window, image-goal token (current observation + goal stacked), deterministic waypoint
+# regression. Paper Table 6: d_model 512, 4 layers, 4 heads, feed-forward 2048.
 # Differences from the paper: fixed-horizon x/y/v targets, no temporal-distance head.
 defaults:
   - base
@@ -8,6 +9,11 @@ defaults:
   - override goal_encoder: image
   - override action_decoder: regression
   - _self_
+
+feat_size: 512
+
+temporal_encoder:
+  num_heads: 4
 
 goal_encoder:
   backbone_name: efficientnet_b0

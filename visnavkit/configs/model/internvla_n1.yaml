@@ -1,8 +1,10 @@
-# InternVLA-N1-style (arXiv:2512.08186, InternRobotics): System 1, the fast executor — a
-# DepthAnythingV2-Small ViT encoder (DINOv2 ViT-S stands in for it) and a flow-matching DiT of
-# hidden 384, 12 layers and 6 heads, conditioned on System 2's low-frequency trajectory latents,
-# which arrive here as a precomputed embedding. Differences: System 2 is out of scope, so there
-# is no pixel-goal grounding and no asynchronous latent-plan finetuning stage.
+# InternVLA-N1-style (arXiv:2512.08186, InternRobotics; the paper presents the model as DualVLN,
+# the dual-system design inside the InternVLA-N1 framework): System 1, the fast executor — a
+# DepthAnythingV2-Small ViT encoder (DINOv2 ViT-S is that trunk) and a flow-matching DiT of
+# hidden 384, 12 layers and 6 heads, conditioned on System 2's four 768-d latent queries, which
+# arrive here as a precomputed embedding. The released code samples 32 trajectories over 10 flow
+# steps. Differences: System 2 is out of scope, so there is no pixel-goal grounding and no
+# asynchronous latent-plan finetuning stage.
 defaults:
   - base
   - override vision_encoder: dinov2_s
@@ -10,7 +12,14 @@ defaults:
   - override action_decoder: flow_dit
   - _self_
 
+goal_encoder:
+  embed_dim: 768  # System 2's latent queries, projected to 768 in the paper
+  hidden: 768
+  num_tokens: 4
+
 action_decoder:
+  num_modes: 32
+  sample_steps: 10
   denoiser:
     hidden: 384
     depth: 12

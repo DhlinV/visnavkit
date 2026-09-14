@@ -1,6 +1,29 @@
-# MIMIC-style (arXiv:2603.22527): frame encoder + causal transformer + multi-hypothesis
-# decoder, i.e. the base recipe. Multi-scale imitation and corrective behaviour expansion are
-# data/training strategies, not architecture. The paper's anchor decoder: action_decoder=anchor.
+# MIMIC-style (arXiv:2603.22527, He et al., VAIL-UCLA): a DINOv3-S observation encoder over the
+# frame window, a 4-layer 512-d fusion transformer, the paper's goal token (distance, cos, sin)
+# masked at p = 0.5 and its camera token (intrinsics plus mount pose) masked at p = 0.2, and an
+# anchor decoder with 64 anchors (set common.use_camera=true so the camera token has inputs).
+# Differences: horizon-specific anchor supervision over four sub-horizons and the query-free
+# reconstruction head are training strategies this repo does not express; multi-scale imitation
+# and corrective behaviour expansion are data stages. The published goal-free export is this
+# recipe with model/goal_encoder=none.
 defaults:
   - base
+  - override vision_encoder: dinov3_s
+  - override temporal_encoder: causal_4layer
+  - override goal_encoder: point
+  - override modality_encoder: camera
+  - override action_decoder: anchor
   - _self_
+
+feat_size: 512
+
+goal_encoder:
+  p_drop: 0.5
+
+modality_encoders:
+  camera:
+    p_drop: 0.2
+
+action_decoder:
+  anchors:
+    num_anchors: 64

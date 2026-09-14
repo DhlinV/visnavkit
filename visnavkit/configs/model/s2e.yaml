@@ -1,10 +1,26 @@
-# S2E-style (arXiv:2507.22028): frozen DINOv3 ViT encoder, point goal (distance, cos, sin) with
-# goal dropout, multi-hypothesis decoder. The paper's RL post-training stage is out of scope.
+# S2E-style (arXiv:2507.22028): ImageNet-pretrained EfficientNet-B0 tokenizer, a 4-layer 8-head
+# transformer over 768-d tokens with feed-forward 3072 (paper Table 10), point goal
+# (distance, cos, sin), and an anchor-guided mixture head over 8 forward-sampled anchors, which
+# the paper's ablation picks (Table 6). Differences: goal dropout is how this repo trains the
+# goal-free mode the release also exposes, and the paper states no probability for it; the arc
+# fan stands in for the paper's uniformly sampled intention points; the RL post-training stage
+# (residual attention blocks, PPO) is out of scope.
 defaults:
   - base
-  - override vision_encoder: dinov3_s
+  - override vision_encoder: efficientnet_b0
+  - override temporal_encoder: causal_4layer
   - override goal_encoder: point
+  - override action_decoder: anchor
   - _self_
+
+feat_size: 768
+
+temporal_encoder:
+  ff_dim: 3072
 
 goal_encoder:
   p_drop: 0.5
+
+action_decoder:
+  anchors:
+    num_anchors: 8

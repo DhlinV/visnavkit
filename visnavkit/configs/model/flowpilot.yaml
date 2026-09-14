@@ -1,18 +1,33 @@
-# FlowPilot-style (arXiv:2606.12603, CoRL 2026, He/Liu/Ma/Zhou, VAIL-UCLA): FastViT encoder over
-# the frame window with the frame-displacement auxiliary loss, the coarse GPS goal, and an anchored
-# rectified-flow decoder trained on Beta(1.5, 1) times. Read off the paper: github.com/VAIL-UCLA/
-# FlowPilot is still a placeholder, so nothing here is checked against released code. Known
-# differences: arc-fan anchors unless an NPZ k-means vocabulary is supplied, plain attention
-# pooling instead of gated cross-attention, and no human-preference alignment stage.
+# FlowPilot-style (arXiv:2606.12603, CoRL 2026, He/Liu/Ma/Zhou, VAIL-UCLA): a FastViT-MA36
+# encoder over pair-stacked frames with an auxiliary per-frame head, the GPS goal token dropped
+# at p = 0.9, and an anchored rectified-flow decoder — 64 k-means anchors, 4 layers, 8 heads,
+# 1280-d tokens, 4 inference steps, Beta(1.5, 1) times (paper §3.2, Table 10). Read off the
+# paper: github.com/VAIL-UCLA/FlowPilot is still a placeholder, so nothing here is checked
+# against released code. Known differences: arc-fan anchors unless an NPZ k-means vocabulary is
+# supplied, the auxiliary head regresses per-frame speed where the paper regresses frame-to-frame
+# displacement, plain attention pooling instead of gated cross-attention, and no human-preference
+# alignment stage.
 defaults:
   - base
   - override goal_encoder: gps
   - override action_decoder: anchor_flow_dit
   - _self_
 
+feat_size: 1280
+
 vision_encoder:
+  backbone_name: fastvit_ma36
   speed_head: true
 
+goal_encoder:
+  p_drop: 0.9
+
 action_decoder:
+  anchors:
+    num_anchors: 64
+  denoiser:
+    hidden: 1280
+    depth: 4
+    num_heads: 8
   scheduler:
     time_sampling: beta

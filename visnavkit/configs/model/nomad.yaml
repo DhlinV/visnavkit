@@ -1,9 +1,22 @@
-# NoMaD-style (arXiv:2310.07896): the ViNT encoder/transformer with goal masking (goal dropout)
-# and a 1D conditional U-Net diffusion policy over the trajectory.
+# NoMaD-style (arXiv:2310.07896): the ViNT encoder/transformer with goal masking (p = 0.5) and a
+# 1D conditional U-Net diffusion policy over the trajectory. Official config: 256-d tokens,
+# 4 layers, 4 heads, feed-forward 1024, down_dims (64, 128, 256), K = 10 denoising steps, and
+# 8 candidates sampled at deployment. Difference: DDIM here at the same K, not the paper's DDPM.
 defaults:
   - vint
   - override action_decoder: diffusion_unet
   - _self_
 
+feat_size: 256
+
+temporal_encoder:
+  ff_dim: 1024
+
 goal_encoder:
   p_drop: 0.5
+
+action_decoder:
+  num_modes: 8
+  sample_steps: 10
+  scheduler:
+    train_timesteps: 10

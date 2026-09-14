@@ -1,11 +1,30 @@
-# NavDP-style (arXiv:2505.08712, InternRobotics): diffusion transformer policy over the frame
-# window with point-goal conditioning. Differences: RGB only — the paper's depth branch belongs
-# in a modality encoder here — a DINOv2 backbone standing in for its DepthAnything features, and
-# no privileged critic, so candidates carry uniform confidence instead of value-ranked scores.
+# NavDP-style (arXiv:2505.08712, InternRobotics): diffusion policy over the frame window with
+# point-goal conditioning. The numbers follow the released code (baselines/navdp): DINOv2 ViT-S
+# tokens at 384-d, a 2-layer fusion transformer, a 16-layer 8-head transformer denoiser, DDPM
+# with K = 10 steps and 16 sampled candidates. The paper instead describes a 1D conditional
+# U-Net denoiser over a single frame; where the two disagree this follows the code.
+# Differences: RGB only — the paper's depth branch belongs in a modality encoder here — a DINOv2
+# backbone standing in for its DepthAnything trunk, and no privileged critic, so candidates carry
+# uniform confidence instead of value-ranked scores.
 defaults:
   - base
   - override vision_encoder: dinov2_s
-  - override temporal_encoder: causal_4layer
+  - override temporal_encoder: causal
   - override goal_encoder: point
   - override action_decoder: diffusion_dit
   - _self_
+
+feat_size: 384
+
+temporal_encoder:
+  num_layers: 2
+
+action_decoder:
+  num_modes: 16
+  sample_steps: 10
+  scheduler:
+    train_timesteps: 10
+  denoiser:
+    hidden: 384
+    depth: 16
+    num_heads: 8

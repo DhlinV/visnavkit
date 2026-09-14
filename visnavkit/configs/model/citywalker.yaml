@@ -1,14 +1,24 @@
-# CityWalker-style (arXiv:2411.17820): frozen DINOv2 frame features, 4-layer transformer over the
-# window, point-goal conditioning and the past odometry the paper feeds alongside it, which
-# arrives here as the `past_xy` ego feature (set common.ego_features=[past_xy] on the dataset).
+# CityWalker-style (arXiv:2411.17820): frozen DINOv2 ViT-B/14 frame features, a 16-layer
+# transformer over the window with 768-d tokens, 8 heads and feed-forward 3072 (paper Table II),
+# point-goal conditioning and the past odometry the paper stacks alongside it, which arrives here
+# as the `past_xy` ego feature (set common.ego_features=[past_xy] on the dataset).
+# Differences: the paper attends bidirectionally over a 5-frame window and this keeps causal
+# attention for per-frame online supervision; its arrival, orientation and feature-hallucination
+# losses are out of scope.
 defaults:
   - base
-  - override vision_encoder: dinov2_s
-  - override temporal_encoder: causal_4layer
+  - override vision_encoder: dinov2_b
+  - override temporal_encoder: causal
   - override goal_encoder: point
   - override modality_encoder: ego
   - override action_decoder: regression
   - _self_
+
+feat_size: 768
+
+temporal_encoder:
+  num_layers: 16
+  ff_dim: 3072
 
 modality_encoders:
   ego:
