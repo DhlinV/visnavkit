@@ -84,6 +84,17 @@ visnavkit/models/
   space; `parse_plan_output` yields trajectories, scales, confidences and the best plan.
   Regression and generative decoders emit uniform confidences, anchor decoders logits.
 
+## Cross-cutting knobs
+
+- `model.vision_encoder.token_mode=global|patch|fused` with `patch_grid=[4,4]` — one token per
+  frame, or a pooled spatial grid for the temporal encoder and decoder to attend over.
+- `model.action_decoder.action_space.kind=waypoint|velocity`, below.
+- `model.vision_encoder.speed_head=true` — the auxiliary per-frame speed loss, off by default.
+- A `normalizer` on the supervision targets and on each input encoder, below.
+- Generative decoders: `scheduler.time_sampling=uniform|logit_normal|beta` (openpi pi0's
+  `Beta(1.5, 1)`) and `scheduler.shift` (diffusers SD3/Flux) for flow matching,
+  `scheduler.beta_schedule` and `clip_sample` for DDIM.
+
 ## Action spaces and normalization
 
 `ActionSpace(kind, pose_size, plan grid)` converts dataset poses `(N, T, P)` to the

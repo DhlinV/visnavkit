@@ -25,7 +25,7 @@ per-frame tokens. Ego status and calibration ship with the repo; a spatial/depth
 is a subclass plus a config entry, and the ONNX contract and feature buffer follow. Every
 input but vision is optional and falls back to its encoder's learned null token.
 
-[Architecture](docs/architecture.md) · [Benchmark guide](docs/benchmark.md) · [Model catalog](docs/models.md) · [Configs](visnavkit/configs/)
+[Architecture](docs/architecture.md) · [Data](docs/data.md) · [Models & weights](docs/models.md) · [Benchmark](docs/benchmark.md) · [Configs](visnavkit/configs/)
 
 ## Roadmap
 
@@ -43,7 +43,6 @@ the paper's reported numbers, which needs the corpus and a training run.
 | Reproducing S2E / MIMIC / FlowPilot | `░░░░░░░░░░` not started |
 | Released VisNavKit checkpoints | `░░░░░░░░░░` none yet |
 | Multi-dataset training with per-corpus normalization | `█████░░░░░` statistics are per corpus; the loader is not |
-| RL post-training | `░░░░░░░░░░` planned |
 
 ## Install
 
@@ -86,24 +85,17 @@ Pick one entry per group, or start from a recipe and override any group.
 
 | Group | Choices |
 | --- | --- |
-| `model/vision_encoder` | `cnn` or `vit` with any timm backbone, plus presets: `fastvit_t8`, `fastvit_t12`, `resnet18`, `resnet50`, `efficientnet_b0`, `mobilenetv2`, `mobilenetv3`, `mobilenetv4`, `convnext_tiny`, `convnextv2_nano`, `regnety_008`, `repvit_m1`, `efficientvit_b0`, `dinov2_s`, `dinov2_b`, `dinov3_s`, `dinov3_b`, `vit_s`, `deit_s`, `eva02_s`, `siglip_b`, `clip_b` |
+| `model/vision_encoder` | `cnn` or `vit` with any timm backbone; 22 presets from `fastvit_t8` to `dinov3_b` in [`configs/model/vision_encoder/`](visnavkit/configs/model/vision_encoder/) |
 | `model/temporal_encoder` | `identity` (single frame), `causal`, `causal_4layer`, `bidirectional` |
 | `model/goal_encoder` | `none`, `point` (distance, cos, sin), `gps` (local x/y metres), `image`, `route_image`, `instruction` (text embedding), `gps_route_image`; set it to a **list** for any other combination |
 | `model/modality_encoder` | `none`, `ego` (free-form `(B, F, E)` vector), `camera` (per-frame intrinsics + extrinsics), `ego_camera`; add your own with `+model.modality_encoders.<name>=...` |
 | `model/action_decoder` | `regression`, `mhp`, `anchor`, `diffusion_mlp`, `diffusion_dit`, `diffusion_unet`, `flow_mlp`, `flow_dit`, `flow_unet`, `anchor_diffusion_dit`, `anchor_flow_dit` |
 
-Knobs that cut across the groups:
-
-- `model.vision_encoder.token_mode=global|patch|fused` with `patch_grid=[4,4]` — one token
-  per frame, or a pooled spatial grid for the temporal encoder and decoder to attend over.
-- `model.action_decoder.action_space.kind=waypoint|velocity` (ego-frame poses, or unicycle
-  speed and yaw rate integrated back to poses).
-- Normalization is per signal, not global: supervision targets use
-  `model.action_decoder.normalizer`, input signals their own encoder's `normalizer`
-  (`gps`, ego vectors). Each is a `Normalizer` with `mode=none|meanstd|minmax|scale` —
-  `scale` needs no corpus, the other two are fit or loaded from an NPZ.
-- `model.vision_encoder.speed_head=true` — per-frame speed regression. A per-recipe
-  auxiliary signal, off by default, adding a `speed` output to the exported graph.
+Knobs that cut across the groups: `vision_encoder.token_mode=global|patch|fused`,
+`action_decoder.action_space.kind=waypoint|velocity`, `vision_encoder.speed_head=true` for the
+auxiliary speed loss, and a per-signal `normalizer` (`none|meanstd|minmax|scale`) on the
+supervision targets and on each input encoder. All four are explained in the
+[architecture guide](docs/architecture.md).
 
 ```bash
 uv run visnavkit-train dataset=torch model=vint \
@@ -112,10 +104,9 @@ uv run visnavkit-train dataset=torch model=vint \
 ```
 
 Generative decoders are a denoiser (`mlp`, `dit`, `unet`) times a scheduler (`ddim`, `flow`),
-optionally anchored; the named entries are those combinations. Scheduler knobs follow their
-reference implementations — `scheduler.time_sampling=beta` (openpi pi0), `.shift=3` (diffusers
-SD3/Flux). Every decoder emits the same flat `[mean, log_scale, confidence]` layout per mode,
-so metrics, export and the benchmark never change.
+optionally anchored; the named entries are those combinations. Every decoder emits the same flat
+`[mean, log_scale, confidence]` layout per mode, so metrics, export and the benchmark never
+change.
 
 ### Recipes
 
@@ -143,96 +134,23 @@ Anything that only reselects one group is an override, not a recipe:
 
 ## Data
 
-Prepare, inspect and measure a corpus with one entry point; everything after `cache` reads the
-cached window targets instead of decoding video again:
+Each clip is a directory with `video.mp4` and four NumPy sidecars (times, positions,
+orientations, speeds); manifests list `video_path label start end`. Targets are interpolated at
+fixed relative times, so any frame rate works.
 
 ```bash
-uv run visnavkit-dataset command=preprocess                      # validate clips, write manifests
-uv run visnavkit-dataset command=visualize dataset=torch         # what the policy is actually fed
-uv run visnavkit-dataset command=cache     dataset=torch         # window targets, no decode
+uv run visnavkit-dataset command=preprocess                    # validate clips, write manifests
+uv run visnavkit-dataset command=visualize dataset=torch       # what the policy is actually fed
 uv run visnavkit-dataset command=stats     dataset=torch name=city   # normalizer NPZ + plots
 uv run visnavkit-dataset command=anchors   dataset=torch num_anchors=16
 ```
 
-`stats` writes the NPZ that `model.action_decoder.normalizer.stats_path` reads and `anchors` the
-one `model.action_decoder.anchors.anchors_path` reads. Both are named after `name`, so several
-corpora keep separate statistics — which is what a multi-dataset run needs, since mixing
-datasets must not mean mixing their normalization.
+Sidecar layout, the opt-in ego and calibration inputs, and the public corpora this format
+targets (FrodoBots-2K, RECON, SCAND, GoStanford2, SACSoN/HuRoN) with their licences:
+[data guide](docs/data.md).
 
-Each clip is a directory with `video.mp4` and NumPy sidecars: `frame_times.npy` (int64 ns,
-strictly increasing), `frame_positions.npy` (N, 3) metres, `frame_orientations.npy` (N, 4)
-wxyz quaternions, `frame_speeds.npy` (N,). Manifests list `video_path label start end` rows.
-Targets are interpolated at fixed relative times, so any frame rate works. Point and image
-goals are sampled from the clip's own future; `route_images.npy` and
-`instruction_embedding.npy` are optional. The dataset reads the goal type from the selected
-goal encoder. Details: [benchmark guide](docs/benchmark.md#prepare-and-evaluate-real-data).
-
-Opt-in modality inputs:
-
-- `common.ego_features=[speed,yaw_rate,past_xy]` packs those per-frame signals into `ego`
-  (`past_xy` is each observed frame's position in the newest frame, i.e. past odometry); match
-  `model.modality_encoders.ego.in_dim` to its width.
-- `common.use_camera=true` reads `camera_intrinsics.npy` (3, 3) or (N, 3, 3) and
-  `camera_extrinsics.npy` (4, 4) or (N, 4, 4) camera-to-ego, then shifts the principal point
-  by the crop, divides by the downscale and mirrors it on a flip, so the calibration always
-  describes the image the policy sees.
-
-`dataset=torch` decodes on CPU; `dataset=dali` decodes on GPU (point goals, speed-only ego).
-
-### Public corpora
-
-Recorded sidewalk and off-road navigation datasets this format targets. Each needs a one-off
-conversion into the clip layout above; `visnavkit-dataset command=preprocess` validates the
-result. Converters are not bundled — the sources differ too much to guess at.
-
-| Corpus | Content | Licence | Source |
-| --- | --- | --- | --- |
-| FrodoBots-2K | ~2000 h teleoperated sidewalk driving in 10+ cities; RGB, GPS, IMU, audio, control | CC BY-SA 4.0 | [BitRobot/FrodoBots-2K](https://huggingface.co/datasets/BitRobot/FrodoBots-2K) |
-| RECON | Off-road exploration with goal images | see source | [project](https://sites.google.com/view/recon-robot/dataset) |
-| SCAND | Socially compliant human-teleoperated navigation | see source | [project](https://www.cs.utexas.edu/~xiao/SCAND/SCAND.html#Links) |
-| GoStanford2 | Indoor trajectories, the ViNT-modified release | see source | [download](https://drive.google.com/drive/folders/1RYseCpbtHEFOsmSX2uqNY_kvSxwZLVP_?usp=sharing) |
-| SACSoN / HuRoN | Indoor navigation among people | see source | [project](https://sites.google.com/view/sacson-review/huron-dataset) |
-
-The last four are ViNT's public training set, listed in
-[visualnav-transformer](https://github.com/robodhruv/visualnav-transformer). Only FrodoBots-2K
-states a licence machine-readably; for the rest, read the terms on the source page before using
-them — each corpus keeps its own, and VisNavKit's MIT licence covers this code only, never the
-data or any third-party weights. Tiny bundled corpora live in [`assets/datasets/`](assets/) and
-are exercised by `tests/data/test_assets.py`.
-
-## Pretrained weights
-
-VisNavKit ships no trained policies; the recipes are architectures, not checkpoints. What it
-does load:
-
-| Weights | How |
-| --- | --- |
-| timm backbone (ImageNet, DINOv2/v3, CLIP, SigLIP, ...) | `model.vision_encoder.pretrained=true`, the default |
-| A vision encoder you trained | `model.vision_encoder.weights=/path/encoder.pt` |
-| A full VisNavKit checkpoint | `pretrained.ckpt_path=/path/last.ckpt`, with `pretrained.strict=false` to take the stages that match |
-| Published navigation ONNX exports | `visnavkit-benchmark` downloads the pinned zoo — see [model catalog](docs/models.md) |
-
-### Upstream checkpoints
-
-Where each paper publishes its own weights. They are **not** loadable into these recipes — the
-recipes adapt the architectures to this repo's data contract, so the tensors do not line up.
-Treat them as baselines to compare against, not as initialization, and follow each project's
-licence.
-
-| Recipe | Released weights | Variants |
-| --- | --- | --- |
-| `gnm`, `vint`, `nomad` | [visualnav-transformer](https://github.com/robodhruv/visualnav-transformer) | one checkpoint per model |
-| `citywalker` | [ai4ce/CityWalker](https://github.com/ai4ce/CityWalker) | — |
-| `mbra` | [Learning-to-Drive-Anywhere-with-MBRA](https://github.com/NHirose/Learning-to-Drive-Anywhere-with-MBRA) | LogoNav image-goal and GPS-goal |
-| `navdp` | [InternRobotics/NavDP](https://github.com/InternRobotics/NavDP) | checkpoint access by author form |
-| `s2e` | [VAIL-UCLA/S2E](https://github.com/VAIL-UCLA/S2E) | BC weights only; the RL stage is unreleased |
-| `socialnav` | [AMAP-EAI/SocialNav](https://github.com/AMAP-EAI/SocialNav) | — |
-| `internvla_n1` | [InternRobotics/InternVLA-N1](https://huggingface.co/InternRobotics/InternVLA-N1) | `-System2`, `-DualVLN`, `-Preview`, `-wo-dagger` |
-| `mimic` | [UCLA-VAIL zoo](https://huggingface.co/UCLA-VAIL/Navigation-Model-Zoo-Public) | goal-free ONNX export; training code pending |
-| `flowpilot` | [VAIL-UCLA/FlowPilot](https://github.com/VAIL-UCLA/FlowPilot) | repository is still a placeholder |
-
-The zoo exports in the last two rows are the ones `visnavkit-benchmark` downloads; see the
-[model catalog](docs/models.md) for their pinned digests and the caveats on each.
+VisNavKit ships no trained policies — the recipes are architectures. What loads, and where each
+paper publishes its own weights: [model catalog](docs/models.md).
 
 ## Train, export, benchmark
 

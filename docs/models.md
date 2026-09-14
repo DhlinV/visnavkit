@@ -119,3 +119,36 @@ CC-BY-NC-SA-4.0. Downloading does not relicense upstream code or weights.
 [visualnav-transformer license](https://github.com/robodhruv/visualnav-transformer/blob/main/LICENSE),
 [CityWalker license](https://github.com/ai4ce/CityWalker/blob/main/LICENSE),
 [NavDP terms](https://github.com/InternRobotics/NavDP#-license)
+
+## Pretrained weights
+
+VisNavKit ships no trained policies; the recipes are architectures, not checkpoints. What it
+does load:
+
+| Weights | How |
+| --- | --- |
+| timm backbone (ImageNet, DINOv2/v3, CLIP, SigLIP, ...) | `model.vision_encoder.pretrained=true`, the default |
+| A vision encoder you trained | `model.vision_encoder.weights=/path/encoder.pt` |
+| A full VisNavKit checkpoint | `pretrained.ckpt_path=/path/last.ckpt`, with `pretrained.strict=false` to take the stages that match |
+| Published navigation ONNX exports | `visnavkit-benchmark` downloads the pinned zoo, catalogued above |
+
+### Upstream checkpoints
+
+Where each paper publishes its own weights. They are **not** loadable into these recipes — the
+recipes adapt the architectures to this repo's data contract, so the tensors do not line up.
+Treat them as baselines to compare against, not as initialization, and follow each project's
+licence.
+
+| Recipe | Released weights | Variants |
+| --- | --- | --- |
+| `gnm`, `vint`, `nomad` | [visualnav-transformer](https://github.com/robodhruv/visualnav-transformer) | one checkpoint per model |
+| `citywalker` | [ai4ce/CityWalker](https://github.com/ai4ce/CityWalker) | — |
+| `mbra` | [Learning-to-Drive-Anywhere-with-MBRA](https://github.com/NHirose/Learning-to-Drive-Anywhere-with-MBRA) | LogoNav image-goal and GPS-goal |
+| `navdp` | [InternRobotics/NavDP](https://github.com/InternRobotics/NavDP) | checkpoint access by author form |
+| `s2e` | [VAIL-UCLA/S2E](https://github.com/VAIL-UCLA/S2E) | BC weights only; the RL stage is unreleased |
+| `socialnav` | [AMAP-EAI/SocialNav](https://github.com/AMAP-EAI/SocialNav) | — |
+| `internvla_n1` | [InternRobotics/InternVLA-N1](https://huggingface.co/InternRobotics/InternVLA-N1) | `-System2`, `-DualVLN`, `-Preview`, `-wo-dagger` |
+| `mimic` | [UCLA-VAIL zoo](https://huggingface.co/UCLA-VAIL/Navigation-Model-Zoo-Public) | goal-free ONNX export; training code pending |
+| `flowpilot` | [VAIL-UCLA/FlowPilot](https://github.com/VAIL-UCLA/FlowPilot) | repository is still a placeholder |
+
+The zoo exports in the last two rows are the ones `visnavkit-benchmark` downloads; see above for their pinned digests and the caveats on each.
