@@ -53,6 +53,7 @@ def _targets(cfg):
         ("diffusion", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "GenerativeDecoder"), 1),
         ("flow_dit", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "GenerativeDecoder"), 1),
         ("anchor", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "AnchorDecoder"), 1),
+        ("flowpilot", ("TimmCNNEncoder", "CausalTemporalEncoder", "point", "GenerativeDecoder"), 1),
     ],
 )
 def test_recipes_select_expected_components(recipe, expected, layers):
@@ -257,6 +258,16 @@ def test_modality_encoder_group_is_an_open_set(option, expected):
         "+model.modality_encoders.imu.in_dim=6",
     )
     assert instantiate(extra.model).modality_input_names == [*expected, "imu"]
+
+
+def test_flowpilot_recipe_follows_the_paper_knobs():
+    """Anchored rectified flow with Beta(1.5, 1) times and the displacement auxiliary loss."""
+    cfg = _compose("model=flowpilot")
+    decoder = cfg.model.action_decoder
+    assert cfg.model.vision_encoder.speed_head is True
+    assert decoder.anchors._target_.endswith("AnchorSet")
+    assert decoder.scheduler.time_sampling == "beta"
+    assert (decoder.scheduler.beta_alpha, decoder.scheduler.beta_beta) == (1.5, 1.0)
 
 
 def test_ema_group_is_optional_and_builds_a_trainer_callback():

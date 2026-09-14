@@ -1,11 +1,10 @@
 # Architecture
 
 A policy takes vision, any number of extra input *modalities*, and any number of goals,
-and connects its stages with tokens of width `feat_size`. Hydra instantiates each stage
-from its own config group; `NavigationPolicy` owns the wiring and `LitModel` handles
-optimization and metrics. The set of stages is deliberately open: the policy knows vision
-by name and everything else through the modality and goal contracts. The decomposition
-follows
+connected by tokens of width `feat_size`. Hydra instantiates each stage from its own config
+group; `NavigationPolicy` owns the wiring, `LitModel` the optimization and metrics. The set
+of stages is deliberately open: the policy knows vision by name and everything else through
+the modality and goal contracts. The decomposition follows
 [diffusers](https://github.com/huggingface/diffusers) (typed outputs, denoiser and
 scheduler as separate objects) and [LeRobot](https://github.com/huggingface/lerobot)
 (one training forward, one deployment predict).
@@ -53,43 +52,34 @@ visnavkit/models/
 | Action decoder | context `(N, K, D)`, goal `(N, G, D)`, optional noise | `PlanOutput(plans (N, M * (2 * T * P + 1)), ...)` |
 
 - **Tokens per frame** `K`: the vision encoder's `token_mode=global` (1), `patch`
-  (`gh * gw` pooled patches) or `fused` (1 + grid), plus whatever the enabled modalities
-  add. Patch tokens carry a learned position embedding; the temporal encoder shares its
-  frame position across the `K` tokens and expands the causal mask. `K * D` is also the
-  width of one deployment feature-buffer slot, so a new modality widens the buffer and the
-  export graph without any other change.
-- **Modalities** are an open `{name: encoder}` mapping (`model/modality_encoder` group, or
-  `+model.modality_encoders.<name>=...`). Each encoder's `input_names` are simultaneously
-  the dataset keys, the `forward`/`predict` keywords and the ONNX input names, so that
-  tuple is the entire interface. Reading distinct keys is enforced at construction.
-- **Side inputs are optional**: every non-vision encoder has a learned null token, so a
-  missing goal, ego status or calibration still produces well-formed tokens. `p_drop`
-  substitutes that null token for a fraction of training samples, so the same weights
-  work with and without the input (goal-free exploration, NoMaD style).
-- **Goal batches**: point goals are per frame, `(B, F, 3)` as (distance, cos, sin) in
-  each frame's ego frame; image `(B, 3, h, w)`, route image `(B, C, h, w)` and
-  instruction `(B, E)` goals describe the whole window. `goal_encoder` may be a **list**,
-  in which case `goal` is a list in the same order and the tokens are concatenated; the
-  dataset's `goal_type` takes the matching list.
-- **Ego status** (`VectorEncoder`) is deliberately free-form `(B, F, E)`: the dataset
-  decides what the channels mean (`common.ego_features`) and the encoder only needs
-  `in_dim` to match. `key` points the same class at any other per-frame vector.
-- **Calibration** (`PinholeCameraEncoder`) is per frame so a moving or switching camera is
-  expressible; it normalizes the intrinsics by the resolution the policy is actually
-  running at (`fx / W`, `fy / H`, `cx / W`, `cy / H`) and adds the extrinsic rotation and
-  translation, so the same weights transfer across crops and downscales.
-- **Auxiliary heads**: the per-frame speed regression is a recipe-specific training
-  signal (`vision_encoder.speed_head=true`), not part of the contract. Without it
-  `VisionOutput.speed` is None, there is no `vision_*` loss, and the export graph has no
-  `speed` output.
-- **Conditioning**: the decoder concatenates context and goal tokens with a type
-  embedding and pools them with one learned attention query (or the mean). One context
-  token with no goal is passed through unchanged, so goal-free single-token recipes cost
-  nothing extra. DiT denoisers also cross-attend to the raw tokens.
-- **Flat layout**: every decoder packs `[mu, log_scale, confidence_logit]` per mode in
-  pose space; `parse_plan_output` yields trajectories, scales, confidences and the best
-  plan. Regression and generative decoders emit uniform confidences; anchor decoders
-  emit classifier logits.
+  (`gh * gw` pooled patches) or `fused` (1 + grid), plus whatever the modalities add. Patch
+  tokens carry a learned position embedding; the temporal encoder shares its frame position
+  across the `K` tokens and expands the causal mask. `K * D` is also one deployment
+  feature-buffer slot, so a new modality widens the buffer and the export graph by itself.
+- **Modalities** are an open `{name: encoder}` mapping (`model/modality_encoder`, or
+  `+model.modality_encoders.<name>=...`). An encoder's `input_names` are at once the
+  dataset keys, the `forward`/`predict` keywords and the ONNX input names — the whole
+  interface. Distinctness is enforced at construction. Ships with `VectorEncoder` (any
+  free-form per-frame vector; `key` selects the batch entry, `common.ego_features` fills
+  it) and `PinholeCameraEncoder`, which normalizes intrinsics by the resolution the policy
+  is running at, so weights transfer across crops and downscales.
+- **Optional inputs**: every non-vision encoder has a learned null token, so a missing
+  goal, ego status or calibration still yields well-formed tokens. `p_drop` substitutes it
+  for a fraction of training samples, so one set of weights works both ways (goal-free
+  exploration, NoMaD style).
+- **Goal batches**: point goals are per frame, `(B, F, 3)` as (distance, cos, sin) in each
+  frame's ego frame; image `(B, 3, h, w)`, route image `(B, C, h, w)` and instruction
+  `(B, E)` describe the whole window. `goal_encoder` may be a **list**, in which case
+  `goal` and the dataset's `goal_type` are lists in the same order.
+- **Auxiliary heads**: per-frame speed regression is a recipe-specific signal
+  (`vision_encoder.speed_head=true`), not part of the contract. Without it
+  `VisionOutput.speed` is None, there is no `vision_*` loss and no `speed` export output.
+- **Conditioning**: the decoder concatenates context and goal tokens with a type embedding
+  and pools them with one learned attention query (or the mean); a lone context token is
+  passed through unchanged. DiT denoisers also cross-attend to the raw tokens.
+- **Flat layout**: every decoder packs `[mu, log_scale, confidence_logit]` per mode in pose
+  space; `parse_plan_output` yields trajectories, scales, confidences and the best plan.
+  Regression and generative decoders emit uniform confidences, anchor decoders logits.
 
 ## Action spaces and normalization
 
@@ -128,11 +118,10 @@ targets; use `meanstd` or `minmax` once a corpus exists.
 
 `ema=default` adds `EMACallback` (`utils/ema.py`), the diffusers `EMAModel` /
 diffusion-policy schedule `1 - (1 + step / inv_gamma) ** -power` capped at `decay`. It
-averages every floating-point tensor of the module, swaps the average in for validation,
-and writes it into the checkpoint's `state_dict`, so monitored metrics, export and the
-benchmark all see the averaged policy. The online weights ride along under
-`ema_online_state_dict`, so a resumed run continues from the weights the restored
-optimizer state belongs to. Denoising decoders benefit most; it is off by default.
+averages every floating-point tensor, swaps the average in for validation, and writes it
+into the checkpoint's `state_dict`, so metrics, export and the benchmark all see the
+averaged policy; the online weights ride along under `ema_online_state_dict` so a resume
+matches the restored optimizer state. Denoising decoders benefit most; off by default.
 
 ## Deployment versus benchmark export
 

@@ -1,0 +1,17 @@
+# FlowPilot-style (arXiv:2606.12603, He/Liu/Ma/Zhou, VAIL-UCLA): FastViT encoder over the frame
+# window with the frame-displacement auxiliary loss, point goal, and an anchored rectified-flow
+# decoder trained on Beta(1.5, 1) times. Differences from the paper: arc-fan anchors unless an
+# NPZ k-means vocabulary is supplied, plain attention pooling instead of gated cross-attention,
+# and no human-preference alignment stage.
+defaults:
+  - base
+  - override goal_encoder: point
+  - override action_decoder: anchor_flow_dit
+  - _self_
+
+vision_encoder:
+  speed_head: true
+
+action_decoder:
+  scheduler:
+    time_sampling: beta
