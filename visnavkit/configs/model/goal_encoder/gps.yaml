@@ -1,0 +1,12 @@
+# Local goal offset (x forward, y left) in metres, as a GPS waypoint gives it. `normalizer`
+# decides how the metres are scaled, independently of the supervision normalizer.
+_target_: visnavkit.models.goal.gps.GpsGoalEncoder
+goal_type: gps
+feat_size: ${model.feat_size}
+in_dim: 2
+hidden: 256
+normalizer:
+  _target_: visnavkit.models.normalization.Normalizer
+  mode: scale  # none | meanstd | minmax (stats_path) | scale
+  scale: 20.0
+p_drop: 0.0  # goal dropout: learn goal-free behaviour too (NoMaD-style masking)

@@ -24,7 +24,7 @@ train_loader:
   crop_xy: ${common.crop_xy}
   crop_wh: ${common.crop_wh}
   downscale_factor: ${common.downscale_factor}
-  goal_type: ${model.goal_encoder.goal_type}
+  goal_type: ${goal_types:${model.goal_encoder}}
   goal_horizon_s: ${common.goal_horizon_s}
   ego_features: ${common.ego_features}
   use_camera: ${common.use_camera}
@@ -57,7 +57,7 @@ val_loader:
   crop_xy: ${common.crop_xy}
   crop_wh: ${common.crop_wh}
   downscale_factor: ${common.downscale_factor}
-  goal_type: ${model.goal_encoder.goal_type}
+  goal_type: ${goal_types:${model.goal_encoder}}
   goal_horizon_s: ${common.goal_horizon_s}
   ego_features: ${common.ego_features}
   use_camera: ${common.use_camera}

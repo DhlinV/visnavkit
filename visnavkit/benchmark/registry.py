@@ -1,7 +1,6 @@
 """Small explicit registries; registration never imports third-party source code."""
 
 
-
 class Registry:
     def __init__(self, name):
         self.name = name
@@ -13,6 +12,7 @@ class Registry:
                 raise ValueError(f"{self.name} already contains {name!r}")
             self._entries[name] = value
             return value
+
         return decorator
 
     def get(self, name):

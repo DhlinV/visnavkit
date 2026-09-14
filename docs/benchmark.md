@@ -48,12 +48,12 @@ are shared with training. Use separate output directories to preserve each run.
 ## Native export and profiling
 
 ```bash
-uv run python -m visnavkit.scripts.benchmark command=export model=resnet18 \
-  output_dir=outputs/benchmark/resnet18
+uv run python -m visnavkit.scripts.benchmark command=export model=gnm \
+  output_dir=outputs/benchmark/gnm
 
-uv run python -m visnavkit.scripts.benchmark command=profile model=resnet18 \
-  artifact=outputs/benchmark/resnet18/resnet18.onnx \
-  runtime.warmup=10 runtime.iterations=100 output_dir=outputs/benchmark/resnet18_timing
+uv run python -m visnavkit.scripts.benchmark command=profile model=gnm \
+  artifact=outputs/benchmark/gnm/resnet18.onnx \
+  runtime.warmup=10 runtime.iterations=100 output_dir=outputs/benchmark/gnm_timing
 ```
 
 Supply `checkpoint=/path/model.ckpt` to export trained weights and compose the

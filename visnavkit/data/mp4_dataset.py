@@ -11,6 +11,7 @@ from visnavkit.data.file_list import parse_file_list_frame_ranges, resolve_path
 from visnavkit.data.pose_targets import (
     get_current_frame_idxs,
     get_future_poses,
+    goal_local_targets,
     goal_point_targets,
     load_pose_arrays,
     sample_goal_frame,
@@ -19,7 +20,7 @@ from visnavkit.data.pose_targets import (
 from visnavkit.utils.common import build_idxs, load_npy
 from visnavkit.utils.orientation import yaw_from_quat
 
-GOAL_TYPES = ("none", "point", "image", "route_image", "instruction")
+GOAL_TYPES = ("none", "point", "gps", "image", "route_image", "instruction")
 EGO_FEATURES = ("speed", "yaw_rate")
 CAMERA_INTRINSICS = "camera_intrinsics.npy"
 CAMERA_EXTRINSICS = "camera_extrinsics.npy"
@@ -37,7 +38,8 @@ class Mp4WindowDataset(Dataset):
 
     ``goal_type`` adds a ``goal`` key, and may be a list of types for policies with several goal
     encoders (``goal`` is then a list in the same order): ``point`` (S, 3) distance/cos/sin of a
-    future frame sampled ``goal_horizon_s`` seconds ahead, ``image`` (3, h, w) uint8 crop of that
+    future frame sampled ``goal_horizon_s`` seconds ahead, ``gps`` (S, 2) the same goal as a local x/y offset in
+    metres, ``image`` (3, h, w) uint8 crop of that
     frame, ``route_image`` (3, h, w) from the episode's ``route_images.npy`` (N, h, w, 3) sidecar
     indexed by the current frame, or ``instruction`` (E,) from ``instruction_embedding.npy``.
 
@@ -142,7 +144,7 @@ class Mp4WindowDataset(Dataset):
         positions, orientations, speeds, times_s = load_pose_arrays(sample_dir)
         seq_idxs = get_current_frame_idxs(start_idx, self.frame_step, self.seq_step, self.seq_len)
         goal_idx = None
-        if {"point", "image"} & set(self.goal_types):
+        if {"point", "gps", "image"} & set(self.goal_types):
             goal_idx = sample_goal_frame(times_s, seq_idxs[-1], self.goal_horizon_s, f"{video_fp}:{start_idx}")
 
         decoder = VideoDecoder(video_fp, device="cpu", dimension_order="NCHW")
@@ -226,6 +228,8 @@ class Mp4WindowDataset(Dataset):
             return None
         if kind == "point":
             goal[:, 2] *= -1.0
+        elif kind == "gps":
+            goal[:, 1] *= -1.0
         elif kind in ("image", "route_image"):
             goal = torch.flip(goal, dims=[-1])
         return goal
@@ -235,6 +239,8 @@ class Mp4WindowDataset(Dataset):
             return None
         if kind == "point":
             return torch.from_numpy(goal_point_targets(positions, orientations, seq_idxs, goal_idx))
+        if kind == "gps":
+            return torch.from_numpy(goal_local_targets(positions, orientations, seq_idxs, goal_idx))
         if kind == "image":
             return decoded[-1]
         if kind == "route_image":

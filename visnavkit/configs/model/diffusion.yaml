@@ -1,5 +1,0 @@
-# Base encoder with an MLP diffusion decoder (DDPM training, DDIM sampling).
-defaults:
-  - base
-  - override action_decoder: diffusion_mlp
-  - _self_

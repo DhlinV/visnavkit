@@ -29,7 +29,8 @@ visnavkit/models/
 │   ├── causal.py / bidirectional.py / identity.py
 ├── goal/                goal specification(s) -> goal tokens
 │   ├── base.py          null token, goal dropout
-│   ├── none.py / point.py / image.py / route.py / instruction.py
+│   ├── none.py / point.py / gps.py / image.py / route.py / instruction.py
+├── normalization.py     Normalizer shared by supervision targets and input signals
 └── action/              context (+ goal) tokens -> trajectories
     ├── base.py          conditioning, packing to the flat layout, losses
     ├── spaces.py        ActionSpace: waypoint | velocity
@@ -67,10 +68,12 @@ visnavkit/models/
   goal, ego status or calibration still yields well-formed tokens. `p_drop` substitutes it
   for a fraction of training samples, so one set of weights works both ways (goal-free
   exploration, NoMaD style).
-- **Goal batches**: point goals are per frame, `(B, F, 3)` as (distance, cos, sin) in each
-  frame's ego frame; image `(B, 3, h, w)`, route image `(B, C, h, w)` and instruction
-  `(B, E)` describe the whole window. `goal_encoder` may be a **list**, in which case
-  `goal` and the dataset's `goal_type` are lists in the same order.
+- **Goal batches**: `point` is per frame, `(B, F, 3)` as (distance, cos, sin) in that frame's
+  ego frame, and `gps` the same goal as a raw `(B, F, 2)` offset in metres; image
+  `(B, 3, h, w)`, route image `(B, C, h, w)` and instruction `(B, E)` describe the whole
+  window. `goal_encoder` may be a **list** (`gps_route_image` is one), in which case `goal`
+  is a list in the same order and the dataset's `goal_type` follows through the
+  `${goal_types:...}` resolver.
 - **Auxiliary heads**: per-frame speed regression is a recipe-specific signal
   (`vision_encoder.speed_head=true`), not part of the contract. Without it
   `VisionOutput.speed` is None, there is no `vision_*` loss and no `speed` export output.
@@ -86,10 +89,16 @@ visnavkit/models/
 `ActionSpace(kind, pose_size, plan grid)` converts dataset poses `(N, T, P)` to the
 predicted quantity and back. `waypoint` is the identity. `velocity` derives unicycle
 (speed, yaw rate) per anchor segment and integrates them back with the same grid, so
-losses act on commands while metrics and export always see poses. `ActionNormalizer`
-holds affine statistics as buffers (fit from targets or loaded from NPZ) so they travel
-with the checkpoint and the ONNX graph. Generative decoders expect roughly unit-scale
-targets; use `meanstd` or `minmax` once a corpus exists.
+losses act on commands while metrics and export always see poses.
+
+Normalization is per signal, never global: supervision targets go through the action
+decoder's `ActionNormalizer`, and each input encoder owns its own `Normalizer`, because a
+`gps` goal in metres, an ego vector mixing m/s with rad/s and the action targets have no
+reason to share statistics. All of them are the same class — `none`, `meanstd`, `minmax`
+(fit with `.fit()` or loaded from an NPZ) or `scale` (a hand-set divisor, no corpus needed)
+— holding their statistics in buffers, so the numbers travel with the checkpoint and the
+ONNX graph and training, export and deployment cannot drift apart. Generative decoders
+expect roughly unit-scale targets, so fit `meanstd` or `minmax` once a corpus exists.
 
 ## Generative decoders
 

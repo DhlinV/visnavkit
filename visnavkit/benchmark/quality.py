@@ -3,7 +3,9 @@
 import numpy as np
 
 
-def trajectory_metrics(predictions, targets, prediction_times, target_times, *, scores=None, horizons=(0.5, 1, 3), valid_mask=None):
+def trajectory_metrics(
+    predictions, targets, prediction_times, target_times, *, scores=None, horizons=(0.5, 1, 3), valid_mask=None
+):
     predictions = np.asarray(predictions, dtype=np.float64)
     targets = np.asarray(targets, dtype=np.float64)
     pt = np.asarray(prediction_times, dtype=np.float64)
@@ -53,21 +55,27 @@ def trajectory_metrics(predictions, targets, prediction_times, target_times, *, 
             if grid[0] < pt[0] - 1e-6:
                 continue  # Do not silently omit early evaluation points or extrapolate predictions.
             true = np.column_stack([np.interp(grid, sample_times, sample_targets[:, d]) for d in range(2)])
-            pred = np.stack([
-                np.column_stack([np.interp(grid, pt, predictions[i, k, :, d]) for d in range(2)])
-                for k in range(candidates)
-            ])
+            pred = np.stack(
+                [
+                    np.column_stack([np.interp(grid, pt, predictions[i, k, :, d]) for d in range(2)])
+                    for k in range(candidates)
+                ]
+            )
             errors = np.linalg.norm(pred - true[None], axis=-1)
             ade, fde = errors.mean(axis=-1), errors[:, -1]
-            row = {"min_ade": ade.min(), "min_fde": fde.min(), "mean_sample_ade": ade.mean(),
-                   "mean_sample_fde": fde.mean()}
+            row = {
+                "min_ade": ade.min(),
+                "min_fde": fde.min(),
+                "mean_sample_ade": ade.mean(),
+                "mean_sample_fde": fde.mean(),
+            }
             if selected is not None:
                 row.update(top1_ade=ade[selected[i]], top1_fde=fde[selected[i]])
             if dims >= 3 and targets.shape[-1] >= 3:
                 true_v = np.interp(grid, sample_times, sample_targets[:, 2])
-                speed_error = np.stack([
-                    np.abs(np.interp(grid, pt, predictions[i, k, :, 2]) - true_v) for k in range(candidates)
-                ]).mean(axis=1)
+                speed_error = np.stack(
+                    [np.abs(np.interp(grid, pt, predictions[i, k, :, 2]) - true_v) for k in range(candidates)]
+                ).mean(axis=1)
                 row["mean_sample_speed_mae"] = speed_error.mean()
                 if selected is not None:
                     row["top1_speed_mae"] = speed_error[selected[i]]
@@ -78,8 +86,12 @@ def trajectory_metrics(predictions, targets, prediction_times, target_times, *, 
             **{name: float(np.mean(samples)) for name, samples in values.items()},
         }
     return {
-        "samples": n, "candidates": candidates, "units": {"displacement": "meter", "speed": "meter_per_second"},
+        "samples": n,
+        "candidates": candidates,
+        "units": {"displacement": "meter", "speed": "meter_per_second"},
         "definition": "point-mean ADE over positive dataset target anchors plus horizon; linearly interpolated FDE",
-        "selection": "highest_score" if scores is not None else ("single_trajectory" if candidates == 1 else "unranked"),
+        "selection": "highest_score"
+        if scores is not None
+        else ("single_trajectory" if candidates == 1 else "unranked"),
         "horizons": results,
     }

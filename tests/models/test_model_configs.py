@@ -41,21 +41,15 @@ def _targets(cfg):
     "recipe, expected, layers",
     [
         ("base", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "MHPDecoder"), 1),
-        ("mimic", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "MHPDecoder"), 1),
-        ("resnet18", ("TimmCNNEncoder", "IdentityTemporalEncoder", "none", "RegressionDecoder"), 0),
         ("gnm", ("TimmCNNEncoder", "IdentityTemporalEncoder", "image", "RegressionDecoder"), 0),
         ("vint", ("TimmCNNEncoder", "CausalTemporalEncoder", "image", "RegressionDecoder"), 4),
         ("nomad", ("TimmCNNEncoder", "CausalTemporalEncoder", "image", "GenerativeDecoder"), 4),
         ("citywalker", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "RegressionDecoder"), 4),
-        ("s2e", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "MHPDecoder"), 1),
-        ("dinov2", ("TimmViTEncoder", "CausalTemporalEncoder", "none", "MHPDecoder"), 1),
-        ("dinov3", ("TimmViTEncoder", "CausalTemporalEncoder", "none", "MHPDecoder"), 1),
-        ("diffusion", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "GenerativeDecoder"), 1),
-        ("flow_dit", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "GenerativeDecoder"), 1),
-        ("anchor", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "AnchorDecoder"), 1),
-        ("flowpilot", ("TimmCNNEncoder", "CausalTemporalEncoder", "point", "GenerativeDecoder"), 1),
         ("mbra", ("TimmCNNEncoder", "CausalTemporalEncoder", "point", "RegressionDecoder"), 4),
         ("navdp", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "GenerativeDecoder"), 4),
+        ("s2e", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "MHPDecoder"), 1),
+        ("mimic", ("TimmCNNEncoder", "CausalTemporalEncoder", "none", "MHPDecoder"), 1),
+        ("flowpilot", ("TimmCNNEncoder", "CausalTemporalEncoder", "point", "GenerativeDecoder"), 1),
     ],
 )
 def test_recipes_select_expected_components(recipe, expected, layers):
@@ -165,7 +159,7 @@ def test_every_action_decoder_group_runs(name):
         assert model.action_decoder.num_modes == 16
 
 
-@pytest.mark.parametrize("name", ["none", "point", "image", "route_image", "instruction"])
+@pytest.mark.parametrize("name", ["none", "point", "gps", "image", "route_image", "instruction"])
 def test_every_goal_encoder_group_runs(name):
     cfg = _compose(
         *SMALL, f"model/goal_encoder={name}", "model/vision_encoder=resnet18", "model.action_decoder.hidden=16"

@@ -33,7 +33,9 @@ class ConstantVelocity:
 class OnnxPredictor:
     """Inputs are prepared per model; this adapter never invents missing goals/depth."""
 
-    def __init__(self, session, *, output_name="trajectories", scores_name=None, xy_scale=1.0, layout="NKTD", speed_index=None):
+    def __init__(
+        self, session, *, output_name="trajectories", scores_name=None, xy_scale=1.0, layout="NKTD", speed_index=None
+    ):
         if layout not in ("NKTD", "NTD"):
             raise ValueError("layout must be NKTD or NTD; use a custom registered predictor for other outputs.")
         if not np.isfinite(xy_scale) or xy_scale <= 0:
@@ -58,7 +60,7 @@ class OnnxPredictor:
                 values = np.asarray(data[key])
                 if values.shape[0] != count:
                     raise ValueError(f"{key} must have leading sample dimension {count}.")
-                value = values[i:i + 1]
+                value = values[i : i + 1]
                 if node.name == "vision" and value.dtype == np.uint8:
                     value = value.astype(np.float32) / 255.0
                 # Diffusion noise input has candidate batch as its leading dimension.

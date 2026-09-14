@@ -1,5 +1,0 @@
-# Base recipe with a frozen DINOv2 ViT-S/14 encoder (inputs padded to a patch multiple).
-defaults:
-  - base
-  - override vision_encoder: dinov2_s
-  - _self_

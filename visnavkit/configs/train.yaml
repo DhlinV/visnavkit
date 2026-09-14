@@ -58,4 +58,5 @@ common:
   # downscale; pair it with model/camera_encoder=pinhole.
   use_camera: false
 
-  data_root: /data/nav_clips  # placeholder until the first dataset lands
+  # Export VISNAVKIT_DATA_ROOT in ~/.bashrc so every config picks the corpus up by itself.
+  data_root: ${oc.env:VISNAVKIT_DATA_ROOT,/data/nav_clips}

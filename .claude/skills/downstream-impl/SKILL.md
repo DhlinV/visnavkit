@@ -20,7 +20,7 @@ description: Implement downstream features in visnavkit (new components, dataset
 | `frame_speeds` | (B, S, 1) | float32 |
 | `frame_times_s` | (B, S) | float64 |
 | `target_times_s` | (B, T) relative seconds | float32 |
-| `goal` (optional) | point (B, S, 3) · image (B, 3, h, w) uint8 · route_image (B, C, h, w) · instruction (B, E); a list when the recipe has several goal encoders | — |
+| `goal` (optional) | point (B, S, 3) · gps (B, S, 2) · image (B, 3, h, w) uint8 · route_image (B, C, h, w) · instruction (B, E); a list when the recipe has several goal encoders | — |
 | `ego` (optional) | (B, S, E) — `common.ego_features` | float32 |
 | `intrinsics` / `extrinsics` (optional) | (B, S, 3, 3) / (B, S, 4, 4) — `common.use_camera` | float32 |
 | any other modality key | (B, S, ...) — whatever its encoder's `input_names` declare | — |

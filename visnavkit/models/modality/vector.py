@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 from visnavkit.models.layers.mlp import build_mlp
+from visnavkit.models.normalization import Normalizer
 
 from .base import BaseModalityEncoder
 
@@ -24,6 +25,7 @@ class VectorEncoder(BaseModalityEncoder):
         hidden: int = 128,
         num_tokens: int = 1,
         p_drop: float = 0.0,
+        normalizer: Normalizer | None = None,
         **kwargs,
     ):
         super().__init__(feat_size, num_tokens=num_tokens, p_drop=p_drop, **kwargs)
@@ -31,6 +33,7 @@ class VectorEncoder(BaseModalityEncoder):
             raise ValueError("in_dim must be positive")
         self.input_names = (key,)
         self.in_dim = in_dim
+        self.normalizer = normalizer or Normalizer()
         self.mlp = build_mlp(in_dim, hidden, num_tokens * feat_size, layers=2)
         self.norm = nn.LayerNorm(feat_size)
 
@@ -38,7 +41,8 @@ class VectorEncoder(BaseModalityEncoder):
         if values.ndim != 3 or values.shape[-1] != self.in_dim:
             raise ValueError(f"{self.input_names[0]} must be (B, F, {self.in_dim}), got {tuple(values.shape)}")
         b, f = values.shape[:2]
-        return self.norm(self.mlp(values.float()).reshape(b, f, self.num_tokens, self.feat_size))
+        values = self.normalizer.normalize(values.float())
+        return self.norm(self.mlp(values).reshape(b, f, self.num_tokens, self.feat_size))
 
     def example_inputs(self, batch_size, frames=1, image_hw=(64, 64), device=None):
         return (torch.zeros(batch_size, frames, self.in_dim, device=device),)

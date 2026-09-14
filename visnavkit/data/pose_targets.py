@@ -97,19 +97,25 @@ def sample_goal_frame(frame_times_s, last_idx: int, horizon_s, key: str) -> int:
     return int(last_idx + candidates[rng.integers(len(candidates))])
 
 
-def goal_point_targets(frame_positions, frame_orientations, seq_idxs, goal_idx: int) -> np.ndarray:
-    """``(S, 3)`` point goal per observed frame: distance (m), cos and sin of the bearing in that frame's ego frame."""
+def goal_local_targets(frame_positions, frame_orientations, seq_idxs, goal_idx: int) -> np.ndarray:
+    """``(S, 2)`` goal offset in metres (x forward, y left) in each observed frame's ego frame."""
     rows = []
     for seq_idx in np.asarray(seq_idxs):
         quat = frame_orientations[seq_idx]
         local_from_odom = rot_from_quat(quat / np.linalg.norm(quat)).T
         local = local_from_odom @ (frame_positions[goal_idx] - frame_positions[seq_idx])
-        distance = float(np.hypot(local[0], local[1]))
-        if distance < 1e-6:
-            rows.append((0.0, 1.0, 0.0))
-        else:
-            rows.append((distance, local[0] / distance, local[1] / distance))
+        rows.append((local[0], local[1]))
     return np.asarray(rows, dtype=np.float32)
+
+
+def goal_point_targets(frame_positions, frame_orientations, seq_idxs, goal_idx: int) -> np.ndarray:
+    """``(S, 3)`` point goal per observed frame: distance (m), cos and sin of the bearing."""
+    local = goal_local_targets(frame_positions, frame_orientations, seq_idxs, goal_idx)
+    distance = np.hypot(local[:, 0], local[:, 1])
+    moving = distance > 1e-6
+    safe = np.where(moving, distance, 1.0)
+    bearing = np.where(moving[:, None], local / safe[:, None], np.array([[1.0, 0.0]], dtype=np.float32))
+    return np.column_stack([np.where(moving, distance, 0.0), bearing]).astype(np.float32)
 
 
 def get_current_frame_idxs(start_idx, frame_step, seq_step, sequence_length):

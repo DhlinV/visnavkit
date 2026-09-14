@@ -1,5 +1,0 @@
-# Base encoder with anchor classification + residual refinement (MIMIC / Hydra-MDP style).
-defaults:
-  - base
-  - override action_decoder: anchor
-  - _self_

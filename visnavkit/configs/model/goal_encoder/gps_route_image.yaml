@@ -1,0 +1,17 @@
+# Two goals at once: the coarse GPS waypoint plus the rendered route patch. `goal_encoder` takes
+# a list, `goal` is the matching list, and the tokens are concatenated — any combination works.
+- _target_: visnavkit.models.goal.gps.GpsGoalEncoder
+  goal_type: gps
+  feat_size: ${model.feat_size}
+  in_dim: 2
+  hidden: 256
+  normalizer:
+    _target_: visnavkit.models.normalization.Normalizer
+    mode: scale
+    scale: 20.0
+  p_drop: 0.0
+- _target_: visnavkit.models.goal.route.RouteImageGoalEncoder
+  goal_type: route_image
+  feat_size: ${model.feat_size}
+  in_chans: 3
+  p_drop: 0.0

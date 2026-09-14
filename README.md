@@ -38,6 +38,15 @@ uv sync --extra dali         # + NVIDIA DALI GPU video decoding (Linux)
 The torch data loader decodes video with TorchCodec and needs **FFmpeg** on the system
 (`apt install ffmpeg`). Python 3.10+.
 
+Point the configs at your corpus once, instead of passing it to every command:
+
+```bash
+echo 'export VISNAVKIT_DATA_ROOT=/data/nav_clips' >> ~/.bashrc && source ~/.bashrc
+```
+
+`common.data_root` reads it (`${oc.env:VISNAVKIT_DATA_ROOT,/data/nav_clips}`), so
+`common.data_root=...` on the command line stays available as an override.
+
 ## Quick start (no data, no downloads)
 
 ```bash
@@ -61,7 +70,7 @@ Pick one entry per group, or start from a recipe and override any group.
 | --- | --- |
 | `model/vision_encoder` | `cnn` or `vit` with any timm backbone, plus presets: `fastvit_t8`, `fastvit_t12`, `resnet18`, `resnet50`, `efficientnet_b0`, `mobilenetv2`, `mobilenetv3`, `mobilenetv4`, `convnext_tiny`, `convnextv2_nano`, `regnety_008`, `repvit_m1`, `efficientvit_b0`, `dinov2_s`, `dinov2_b`, `dinov3_s`, `dinov3_b`, `vit_s`, `deit_s`, `eva02_s`, `siglip_b`, `clip_b` |
 | `model/temporal_encoder` | `identity` (single frame), `causal`, `causal_4layer`, `bidirectional` |
-| `model/goal_encoder` | `none`, `point` (distance, cos, sin), `image`, `route_image`, `instruction` (text embedding); set it to a **list** for several goals at once |
+| `model/goal_encoder` | `none`, `point` (distance, cos, sin), `gps` (local x/y metres), `image`, `route_image`, `instruction` (text embedding), `gps_route_image`; set it to a **list** for any other combination |
 | `model/modality_encoder` | `none`, `ego` (free-form `(B, F, E)` vector), `camera` (per-frame intrinsics + extrinsics), `ego_camera`; add your own with `+model.modality_encoders.<name>=...` |
 | `model/action_decoder` | `regression`, `mhp`, `anchor`, `diffusion_mlp`, `diffusion_dit`, `diffusion_unet`, `flow_mlp`, `flow_dit`, `flow_unet`, `anchor_diffusion_dit`, `anchor_flow_dit` |
 
@@ -70,14 +79,18 @@ Knobs that cut across the groups:
 - `model.vision_encoder.token_mode=global|patch|fused` with `patch_grid=[4,4]` — one token
   per frame, or a pooled spatial grid for the temporal encoder and decoder to attend over.
 - `model.action_decoder.action_space.kind=waypoint|velocity` (ego-frame poses, or unicycle
-  speed and yaw rate integrated back to poses) and `.normalizer.mode=none|meanstd|minmax`.
+  speed and yaw rate integrated back to poses).
+- Normalization is per signal, not global: supervision targets use
+  `model.action_decoder.normalizer`, input signals their own encoder's `normalizer`
+  (`gps`, ego vectors). Each is a `Normalizer` with `mode=none|meanstd|minmax|scale` —
+  `scale` needs no corpus, the other two are fit or loaded from an NPZ.
 - `model.vision_encoder.speed_head=true` — per-frame speed regression. A per-recipe
   auxiliary signal, off by default, adding a `speed` output to the exported graph.
 
 ```bash
 uv run visnavkit-train dataset=torch model=vint \
-  model/vision_encoder=dinov3_s model/goal_encoder=point model/action_decoder=flow_dit \
-  model.vision_encoder.token_mode=fused common.data_root=/data/nav_clips
+  model/vision_encoder=dinov3_s model/goal_encoder=gps model/action_decoder=flow_dit \
+  model.vision_encoder.token_mode=fused
 ```
 
 Generative decoders are a denoiser (`mlp`, `dit`, `unet`) times a scheduler (`ddim`, `flow`),
@@ -94,8 +107,6 @@ reproductions or checkpoint-compatible replacements.
 
 | Recipe | Vision | Temporal | Goal | Decoder |
 | --- | --- | --- | --- | --- |
-| `base`, `mimic` | FastViT-T8 | causal x1 | none | MHP |
-| `resnet18` | ResNet18 | single frame | none | regression |
 | `gnm` | MobileNetV2 | single frame | image (stacked with observation) | regression |
 | `vint` | EfficientNet-B0 | causal x4 | image (stacked) | regression |
 | `nomad` | EfficientNet-B0 | causal x4 | image, 50% goal dropout | diffusion U-Net |
@@ -103,9 +114,12 @@ reproductions or checkpoint-compatible replacements.
 | `mbra` | EfficientNet-B0 | causal x4 | point | regression |
 | `navdp` | DINOv2 ViT-S | causal x4 | point | diffusion DiT |
 | `s2e` | DINOv3 ViT-S | causal x1 | point, 50% goal dropout | MHP |
+| `mimic` | FastViT-T8 | causal x1 | none | MHP |
 | `flowpilot` | FastViT-T8 + speed head | causal x1 | point | anchored flow DiT, Beta(1.5, 1) times |
-| `dinov2`, `dinov3` | DINO ViT-S | causal x1 | none | MHP |
-| `diffusion`, `flow_dit`, `anchor` | FastViT-T8 | causal x1 | none | diffusion MLP, flow DiT, anchor |
+
+`model=base` is the bare skeleton these inherit — the stage wiring with no paper attached.
+Anything that only reselects one group is an override, not a recipe:
+`model/action_decoder=flow_dit`, `model/vision_encoder=dinov3_s`.
 
 ## Data
 
@@ -131,9 +145,9 @@ Opt-in modality inputs:
 ## Train, export, benchmark
 
 ```bash
-uv run visnavkit-train dataset=torch model=base common.data_root=/data/nav_clips
+uv run visnavkit-train dataset=torch model=mimic
 uv run visnavkit-export checkpoint=logs/baseline/.../last.ckpt output=outputs/policy.onnx
-uv run visnavkit-benchmark command=export model=resnet18 output_dir=outputs/benchmark/resnet18
+uv run visnavkit-benchmark command=export model=gnm output_dir=outputs/benchmark/gnm
 ```
 
 `ema=default` keeps an exponential moving average of the weights (diffusers `EMAModel`
