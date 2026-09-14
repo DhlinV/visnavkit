@@ -35,14 +35,15 @@ the paper's reported numbers, which needs the corpus and a training run.
 | | Progress |
 | --- | --- |
 | Architectures adapted | `██████████` 11/11 |
-| Export, ONNX parity, open-loop benchmark | `██████████` done |
-| Corpus tooling: preprocess, cache, stats, anchors, visualize | `██████████` done |
+| Corpus tooling: preprocess, cache, stats, anchors, visualize | `██████████` 5/5 |
+| Export, ONNX parity, open-loop benchmark | `██████████` 3/3 |
+| Multi-dataset training: per-corpus statistics, then a loader that mixes them | `█████░░░░░` 1/2 |
 | Dataset converters: FrodoBots-2K, RECON, SCAND, GoStanford2, SACSoN | `░░░░░░░░░░` 0/5 |
-| Reproducing GNM / ViNT / NoMaD | `░░░░░░░░░░` not started |
-| Reproducing CityWalker / MBRA / NavDP | `░░░░░░░░░░` not started |
-| Reproducing S2E / MIMIC / FlowPilot | `░░░░░░░░░░` not started |
-| Released VisNavKit checkpoints | `░░░░░░░░░░` none yet |
-| Multi-dataset training with per-corpus normalization | `█████░░░░░` statistics are per corpus; the loader is not |
+| Reproducing GNM / ViNT / NoMaD | `░░░░░░░░░░` 0/3 |
+| Reproducing CityWalker / MBRA / NavDP | `░░░░░░░░░░` 0/3 |
+| Reproducing S2E / SocialNav / InternVLA-N1 | `░░░░░░░░░░` 0/3 |
+| Reproducing MIMIC / FlowPilot | `░░░░░░░░░░` 0/2 |
+| Released VisNavKit checkpoints, one per recipe | `░░░░░░░░░░` 0/11 |
 
 ## Install
 
