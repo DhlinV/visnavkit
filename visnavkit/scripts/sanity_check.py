@@ -1,4 +1,6 @@
-"""Check a configured policy and print its pipeline using synthetic inputs.
+"""Check a configured policy on synthetic inputs: pipeline shapes, a training forward/backward,
+and the three inference views agreeing — ``act`` (window -> actions), ``forward``'s newest
+decision and ``predict`` through the deployment feature buffer.
 
 python -m visnavkit.scripts.sanity_check
 python -m visnavkit.scripts.sanity_check model/vision_encoder=resnet18 model/temporal_encoder=bidirectional
@@ -123,7 +125,21 @@ def _check_feature_buffer(model, vision, goal, modalities, seq_step):
     torch.testing.assert_close(token, features[:, -1])
     if model.vision_encoder.has_speed_head:
         torch.testing.assert_close(outputs[2], expected.vision.speed.reshape(batch, sequence, -1)[:, -1])
-    return history_size, temporal.reduction
+    return history_size, temporal.reduction, exported.action_decoder.parse_output(expected.plan.plans), noise
+
+
+@torch.no_grad()
+def _check_act(model, vision, goal, modalities, noise, expected):
+    """``act`` on the training model (any reduction) returns the newest decision of the window."""
+    batch = vision.shape[0]
+    decoder = model.action_decoder
+    trajectories, scores = model.act(vision, goal=goal, noise=noise, **modalities)
+    assert tuple(trajectories.shape) == (batch, decoder.num_modes, decoder.num_pts, decoder.pose_size)
+    assert tuple(scores.shape) == (batch, decoder.num_modes)
+    assert torch.isfinite(trajectories).all() and torch.allclose(scores.sum(1), torch.ones(batch))
+    torch.testing.assert_close(trajectories, expected["plans"], rtol=2e-4, atol=2e-5)
+    torch.testing.assert_close(scores, expected["confs"], rtol=2e-4, atol=2e-5)
+    return list(trajectories.shape), list(scores.shape)
 
 
 def main(argv=None):
@@ -189,10 +205,12 @@ def main(argv=None):
     print(f"[PASS] Training loss={losses['loss'].item():.6f}; backward gradients finite")
     model.zero_grad(set_to_none=True)
     model.eval()
-    history_size, export_reduction = _check_feature_buffer(
+    history_size, export_reduction, expected, noise = _check_feature_buffer(
         model, vision, goal, modalities, int(cfg.model.export_cfg.seq_step)
     )
     print(f"[PASS] Feature-buffer parity (history={history_size}, reduction={export_reduction})")
+    trajectories, scores = _check_act(model, vision, goal, modalities, noise, expected)
+    print(f"[PASS] act(): trajectories {trajectories} [batch, modes, points, pose], scores {scores}; matches predict")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     pipeline_path = args.output_dir / "pipeline.txt"
     pipeline_path.write_text(diagram + "\n")

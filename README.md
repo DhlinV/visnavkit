@@ -16,7 +16,9 @@ context   vision   (B, F, 3, H, W)                            ─┐
 goal      point · gps · image · route · instruction · <yours> ─┘
 ```
 
-B batch, F frames, M candidates, T steps, D pose; every input but vision is optional.
+B batch, F frames, M candidates, T steps, D pose; every input but vision is optional. That function is
+`policy.act(vision, goal, **inputs)`; `forward` is its training view (one decision per frame, packed
+for the losses) and `predict` its streaming view (the newest frame plus a feature buffer).
 
 [Architecture](docs/architecture.md) · [Data](docs/data.md) · [Models & weights](docs/models.md) · [Benchmark](docs/benchmark.md) · [Roadmap](docs/roadmap.md)
 
@@ -33,12 +35,12 @@ Python 3.10+; the TorchCodec loader needs FFmpeg on the system (`apt install ffm
 
 ## Quick start
 
-No data, no downloads. Composes the pipeline, prints its shapes, runs a training step, checks the
-deployment feature-buffer path against the full window, and with `--onnx` exports and verifies
-ONNX Runtime parity:
+No data, no downloads. Composes the pipeline, prints its shapes, runs a training forward and
+backward, and checks that `act`, `forward` and the feature-buffer `predict` agree on the newest
+decision; `--onnx` also exports and verifies ONNX Runtime parity:
 
 ```bash
-uv run visnavkit-sanity-check model=s2e model/action_decoder=flow_dit --onnx
+uv run visnavkit-sanity-check model=s2e model/action_decoder=anchor_flow_dit --onnx
 ```
 
 ## Compose a policy
@@ -126,7 +128,7 @@ uv run visnavkit-benchmark command=export model=gnm output_dir=outputs/benchmark
 Training records Git provenance (`strict_git=true` requires a clean tree) and keeps overrides in
 [`configs/experiment/`](visnavkit/configs/experiment/). The deployment graph streams one frame
 through a feature buffer; the benchmark graph runs the full window for latency and open-loop
-metrics — [architecture](docs/architecture.md#deployment-versus-benchmark-export),
+metrics — [architecture](docs/architecture.md#inference-deployment-benchmark),
 [benchmark](docs/benchmark.md).
 
 ## Development

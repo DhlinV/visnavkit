@@ -12,7 +12,6 @@ from omegaconf import OmegaConf
 from torch import nn
 from torch.utils.flop_counter import FlopCounterMode
 
-from visnavkit.models.action.outputs import parse_plan_output
 from visnavkit.models.lit_model import disable_pretrained_downloads
 from visnavkit.utils.common import build_idxs
 
@@ -78,17 +77,9 @@ class SequencePolicy(nn.Module):
 
     def forward(self, vision, initial_noise=None):
         batch, history = vision.shape[:2]
-        encoded = self.model.encode_frames(vision)
-        tokens = self.model._per_frame_tokens(
-            encoded.tokens.reshape(batch, history, self.model.vision_tokens, self.model.feat_size),
-            self.model.encode_modalities({}, batch, history, vision.shape[-2:]),
-            dim=2,
-        )
-        context = self.model.temporal_encoder(tokens)[:, -1]
-        flat = self.decoder(context, self.model.null_goal_tokens(batch), initial_noise).plans
-        parsed = parse_plan_output(
-            flat, num_modes=self.decoder.num_modes, num_pts=self.decoder.num_pts, pose_size=self.decoder.pose_size
-        )
+        encoded, context, _ = self.model.encode_window(vision, {})
+        flat = self.decoder(context[:, -1], self.model.null_goal_tokens(batch), initial_noise).plans
+        parsed = self.decoder.parse_output(flat)
         outputs = (parsed["plans"], parsed["confs"])
         if self.model.vision_encoder.has_speed_head:
             outputs += (encoded.speed.reshape(batch, history, -1)[:, -1],)

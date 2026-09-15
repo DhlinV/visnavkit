@@ -48,7 +48,10 @@ class NavigationPolicy(nn.Module):
     - ``goal`` one goal per goal encoder -> goal tokens for the action decoder. ``goal_encoder``
       may be a list, in which case ``goal`` is the matching list and the tokens are concatenated.
 
-    Training: ``forward(vision, goal=None, noise=None, **modality_inputs)``.
+    Inference: ``act(vision, goal=None, noise=None, **modality_inputs)`` -> trajectories
+    ``(B, M, T, P)`` and scores ``(B, M)`` for the newest frame of the window.
+    Training: ``forward(...)`` with the same inputs, one decision per frame under
+    ``reduction=none``, packed in the flat layout the losses read.
     Deployment: ``predict(frame, feature_buffer, goal=None, noise=None, **modality_inputs)``
     encodes one frame and reuses past frame tokens from the buffer ``(B, history, K * D)``; the
     newest frame's modality inputs are passed without a frame axis.
@@ -221,14 +224,27 @@ class NavigationPolicy(nn.Module):
                 prepared.append(value.repeat_interleave(decisions, dim=0) if decisions > 1 else value)
         return prepared
 
-    def forward(self, vision: torch.Tensor, goal=None, noise: torch.Tensor | None = None, **inputs) -> PolicyOutput:
+    def encode_window(self, vision: torch.Tensor, inputs: Mapping) -> tuple[VisionOutput, torch.Tensor, dict]:
+        """``(B, F, 3, H, W)`` plus modality inputs -> vision output, context ``(B, F', K, D)``, modality tokens."""
         b, f = vision.shape[:2]
         vision_out = self.encode_frames(vision)
         modality_tokens = self.encode_modalities(inputs, b, f, vision.shape[-2:])
         tokens = self._per_frame_tokens(
             vision_out.tokens.reshape(b, f, self.vision_tokens, self.feat_size), modality_tokens, dim=2
         )
-        context = self.temporal_encoder(tokens)
+        return vision_out, self.temporal_encoder(tokens), modality_tokens
+
+    def act(self, vision: torch.Tensor, goal=None, noise: torch.Tensor | None = None, **inputs):
+        """One decision for the newest frame: trajectories ``(B, M, T, P)`` in pose space, scores ``(B, M)``."""
+        b, f = vision.shape[:2]
+        _, context, _ = self.encode_window(vision, inputs)
+        goal_tokens = self._encode_goals(self._window_goals(goal, b, f, 1), b, vision[:, -1])
+        parsed = self.action_decoder.parse_output(self.action_decoder(context[:, -1], goal_tokens, noise).plans)
+        return parsed["plans"], parsed["confs"]
+
+    def forward(self, vision: torch.Tensor, goal=None, noise: torch.Tensor | None = None, **inputs) -> PolicyOutput:
+        b, f = vision.shape[:2]
+        vision_out, context, modality_tokens = self.encode_window(vision, inputs)
         decisions = context.shape[1]
         observation = vision.flatten(0, 1) if decisions > 1 else vision[:, -1]
         goal_tokens = self._encode_goals(self._window_goals(goal, b, f, decisions), b * decisions, observation)

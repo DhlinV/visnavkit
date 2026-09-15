@@ -101,7 +101,12 @@ visnavkit/models/
 into the checkpoint's `state_dict` (online weights ride along under `ema_online_state_dict` for
 resumes). Denoising decoders benefit most; off by default.
 
-## Deployment versus benchmark export
+## Inference, deployment, benchmark
+
+`NavigationPolicy.act(vision, goal=None, noise=None, **modality_inputs)` is the window-in,
+actions-out contract: trajectories `(B, M, T, P)` in pose space and scores `(B, M)` for the
+newest frame. `forward` runs the same encoders and returns the flat packed layout, one decision
+per frame under `reduction=none`; both share `encode_window`.
 
 `NavigationPolicy.predict(frame, feature_buffer, goal=None, noise=None, **modality_inputs)`
 encodes one frame and reuses buffered past tokens `(B, history, K * D)`; the newest frame's

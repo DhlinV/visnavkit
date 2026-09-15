@@ -278,6 +278,7 @@ def test_feature_buffer_matches_full_observation_window(
             noise=noise,
             **{name: value[:, -1] for name, value in modalities.items()},
         )
+        trajectories, scores = model.act(window, goal=window_goals, noise=noise, **strided)
     assert model.export_output_names() == ["plan", "feat_out", "speed"]
     goal_inputs = ["goal"] if len(live) == 1 else [f"goal_{i}" for i in range(len(live))]
     assert model.export_input_names() == ["vision", "feature_buffer", *goal_inputs] + (["ego"] if ego else []) + (
@@ -286,6 +287,10 @@ def test_feature_buffer_matches_full_observation_window(
     torch.testing.assert_close(plan, expected, atol=2e-5, rtol=2e-4)
     torch.testing.assert_close(speed, full.vision.speed.reshape(2, seq_len, 1)[:, -1])
     torch.testing.assert_close(token, encoded[:, -1])
+    parsed = model.action_decoder.parse_output(expected)  # act() is the newest decision of the same window
+    assert trajectories.shape == (2, model.action_decoder.num_modes, model.action_decoder.num_pts, 3)
+    torch.testing.assert_close(trajectories, parsed["plans"], atol=2e-5, rtol=2e-4)
+    torch.testing.assert_close(scores, parsed["confs"], atol=2e-5, rtol=2e-4)
 
 
 def test_goal_shape_validation_and_null_goal():
