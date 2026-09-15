@@ -143,21 +143,30 @@ package as `visnavkit.configs`. Coding-agent contract: [AGENTS.md](AGENTS.md).
 
 ## Credits
 
-Built on [PyTorch Lightning](https://github.com/Lightning-AI/pytorch-lightning),
-[Hydra](https://github.com/facebookresearch/hydra), [timm](https://github.com/huggingface/pytorch-image-models),
-[TorchCodec](https://github.com/pytorch/torchcodec), [NVIDIA DALI](https://github.com/NVIDIA/DALI),
-[ONNX Runtime](https://github.com/microsoft/onnxruntime), [OnnxSlim](https://github.com/inisis/OnnxSlim),
-[uv](https://github.com/astral-sh/uv) and [Ruff](https://github.com/astral-sh/ruff).
-Design borrowed from [diffusers](https://github.com/huggingface/diffusers) (typed outputs,
-denoiser and scheduler as separate objects, the EMA schedule),
-[openpi](https://github.com/Physical-Intelligence/openpi) (flow-matching conventions, Beta time
-sampling), [LeRobot](https://github.com/huggingface/lerobot) (one training forward, one deployment
-predict), [diffusion_policy](https://github.com/real-stanford/diffusion_policy) (the 1D U-Net
-denoiser), [visualnav-transformer](https://github.com/robodhruv/visualnav-transformer) (the GNM /
-ViNT / NoMaD recipes) and [openpilot](https://github.com/commaai/openpilot) (quadratically spaced
-anchors).
+VisNavKit is built on the following amazing open-source projects:
+
+- [PyTorch Lightning](https://github.com/Lightning-AI/pytorch-lightning) Training loop, checkpointing and callbacks.
+- [Hydra](https://github.com/facebookresearch/hydra) + [OmegaConf](https://github.com/omry/omegaconf) Composable configuration for every stage.
+- [timm](https://github.com/huggingface/pytorch-image-models) Every vision backbone, pretrained and feature-ready.
+- [TorchCodec](https://github.com/pytorch/torchcodec) and [NVIDIA DALI](https://github.com/NVIDIA/DALI) CPU and GPU video decoding.
+- [ONNX Runtime](https://github.com/microsoft/onnxruntime) and [OnnxSlim](https://github.com/inisis/OnnxSlim) Deployment graphs, parity checks and benchmarks.
+- [uv](https://github.com/astral-sh/uv) + [Ruff](https://github.com/astral-sh/ruff) Environments, linting and formatting.
+
+The following repositories greatly inspire VisNavKit:
+
+- [diffusers](https://github.com/huggingface/diffusers) — typed outputs, denoiser and scheduler as separate objects, the EMA schedule.
+- [openpi](https://github.com/Physical-Intelligence/openpi) — flow-matching conventions and its Beta time sampling.
+- [LeRobot](https://github.com/huggingface/lerobot) — one training forward, one deployment predict.
+- [diffusion_policy](https://github.com/real-stanford/diffusion_policy) — the conditional 1D U-Net denoiser.
+- [visualnav-transformer](https://github.com/robodhruv/visualnav-transformer) — the GNM / ViNT / NoMaD recipes.
+- [openpilot](https://github.com/commaai/openpilot) — quadratically spaced trajectory anchors.
+
+Thanks to the maintainers of these projects for their contribution to the community!
 
 ## Research references
+
+<details>
+<summary>Navigation policies, world models, generative building blocks, simulators and benchmarks</summary>
 
 Navigation policies, oldest first; every one but ViKiNG has a recipe above.
 
@@ -180,7 +189,11 @@ World models, generative building blocks, simulators and benchmarks:
 - **Diffusion Policy** — [arXiv:2303.04137](https://arxiv.org/abs/2303.04137), [code](https://github.com/real-stanford/diffusion_policy); **DiT** — [arXiv:2212.09748](https://arxiv.org/abs/2212.09748), [code](https://github.com/facebookresearch/DiT); **Flow matching** — [arXiv:2210.02747](https://arxiv.org/abs/2210.02747)
 - **MetaUrban** — [arXiv:2407.08725](https://arxiv.org/abs/2407.08725), [code](https://github.com/metadriverse/metaurban); **SidewalkBench** — [arXiv:2606.16953](https://arxiv.org/abs/2606.16953)
 
+</details>
+
 ## Citation
+
+If VisNavKit helps your work, please consider citing it:
 
 ```bibtex
 @Misc{visnavkit2026,
