@@ -33,7 +33,9 @@ Opt-in inputs:
   with crop, downscale and flips.
 
 `dataset=torch` decodes on CPU (every goal type and input); `dataset=dali` decodes on GPU (point
-goals, speed-only ego). Tiny bundled corpora in [`assets/datasets/`](../assets/) back the tests.
+goals, speed-only ego). `visnavkit-train-route route=ae|vae` trains a route-patch autoencoder on the
+`route_images.npy` sidecars alone (`dataset=route`, no decode); its checkpoint seeds a policy with
+`model/goal_encoder=route_image model.goal_encoder.weights=<ckpt>`. Tiny bundled corpora in [`assets/datasets/`](../assets/) back the tests.
 
 ## Public corpora
 

@@ -16,6 +16,7 @@ uv run visnavkit-sanity-check model=gnm   # architecture, shapes, a train step, 
 uv run visnavkit-sanity-check model=gnm --onnx      # + export and ONNX Runtime parity
 uv run visnavkit-dataset command=cache dataset=torch  # corpus tooling, see scripts/dataset/
 uv run visnavkit-train dataset=torch model=mimic
+uv run visnavkit-train-route route=vae    # route-patch AE/VAE; model.goal_encoder.weights=<ckpt> seeds route_image
 uv run visnavkit-export checkpoint=<ckpt> output=outputs/policy.onnx
 ```
 

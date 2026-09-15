@@ -1,0 +1,35 @@
+# Train a route-patch AE (route=ae) or VAE (route=vae) on the route_images.npy sidecars, then seed a
+# policy's route goal encoder: model/goal_encoder=route_image model.goal_encoder.weights=<ckpt>.
+defaults:
+  - dataset: route
+  - optimizer: adamw
+  - route: ae
+  - _self_
+
+log_dir: logs
+exp_name: route_ae
+seed: 42
+strict_git: false
+logger:
+  _target_: lightning.pytorch.loggers.CSVLogger
+  save_dir: ${log_dir}
+  name: ${exp_name}
+
+trainer:
+  kwargs:
+    max_epochs: 50
+    devices: 1
+    precision: "bf16-mixed"
+    check_val_every_n_epoch: 1
+    num_sanity_val_steps: 2
+    log_every_n_steps: 1
+    gradient_clip_val: ${optimizer.max_grad_norm}
+  logging:
+    save_top_k_ckpts: 3
+    monitor: val/loss
+    mode: min
+  resume:
+    ckpt_path: null
+
+common:
+  data_root: ${oc.env:VISNAVKIT_DATA_ROOT,/data/nav_clips}

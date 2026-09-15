@@ -1,0 +1,9 @@
+# Route-patch autoencoder. Its encoder is RouteImageGoalEncoder.cnn, so a checkpoint seeds a policy
+# with model/goal_encoder=route_image model.goal_encoder.weights=<ckpt>; keep `channels` equal.
+_target_: visnavkit.models.goal.route_ae.RouteAutoencoder
+in_chans: 3
+channels: [32, 64, 128, 256]
+latent_dim: 128
+image_hw: [64, 64]  # the route_images.npy patch size, a multiple of 2^len(channels)
+variational: false
+beta: 1.0  # KL weight (VAE only)

@@ -53,7 +53,8 @@ visnavkit/models/
   ego frame; `gps` the same goal as a raw `(B, F, 2)` metre offset; image `(B, 3, h, w)`,
   route image `(B, C, h, w)` and instruction `(B, E)` describe the whole window. A **list** of
   goal encoders takes a list of goals in the same order; the dataset's `goal_type` follows via
-  the `${goal_types:...}` resolver.
+  the `${goal_types:...}` resolver. A `route_image` encoder takes `weights=<ckpt>` from
+  `visnavkit-train-route`, whose AE/VAE encoder is the same CNN.
 - **Auxiliary heads**: per-frame speed regression (`vision_encoder.speed_head=true`) is
   recipe-specific; without it there is no `speed` output and no `vision_*` loss.
 - **Conditioning**: the decoder concatenates context and goal tokens with a type embedding and

@@ -1,0 +1,4 @@
+defaults:
+  - ae
+  - _self_
+variational: true

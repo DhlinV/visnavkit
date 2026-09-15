@@ -27,6 +27,7 @@ plot = ["matplotlib>=3.9.3"]
 
 [project.scripts]
 visnavkit-train = "visnavkit.scripts.train:main"
+visnavkit-train-route = "visnavkit.scripts.train_route:main"
 visnavkit-export = "visnavkit.scripts.export:main"
 visnavkit-benchmark = "visnavkit.scripts.benchmark:main"
 visnavkit-benchmark-data = "visnavkit.scripts.benchmark_dataloader:main"

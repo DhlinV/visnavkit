@@ -5,3 +5,4 @@ feat_size: ${model.feat_size}
 in_chans: 3
 channels: [32, 64, 128, 256]
 p_drop: 0.0
+weights: null  # route autoencoder checkpoint from visnavkit-train-route

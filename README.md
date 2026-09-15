@@ -121,11 +121,14 @@ Sidecar layout, the opt-in ego and calibration inputs, and the public corpora th
 
 ```bash
 uv run visnavkit-train dataset=torch model=mimic ema=default
+uv run visnavkit-train-route route=vae                      # route-patch AE/VAE from route_images.npy
 uv run visnavkit-export checkpoint=logs/baseline/.../last.ckpt output=outputs/policy.onnx
 uv run visnavkit-benchmark command=export model=gnm output_dir=outputs/benchmark/gnm
 ```
 
-Training records Git provenance (`strict_git=true` requires a clean tree) and keeps overrides in
+A route checkpoint seeds the route goal encoder: `model/goal_encoder=route_image
+model.goal_encoder.weights=<ckpt>`. Training records Git provenance (`strict_git=true` requires
+a clean tree) and keeps overrides in
 [`configs/experiment/`](visnavkit/configs/experiment/). The deployment graph streams one frame
 through a feature buffer; the benchmark graph runs the full window for latency and open-loop
 metrics — [architecture](docs/architecture.md#inference-deployment-benchmark),

@@ -2,11 +2,11 @@ import lightning as L
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
-from visnavkit.data.mp4_dataset import Mp4WindowDataset
-
 
 class TorchDataModule(L.LightningDataModule):
     """Plain torch DataLoader counterpart of DaliDataModule (same loader cfg keys + batch keys)."""
+
+    dataset_cls = None  # None: the window dataset, imported lazily so route training needs no torchcodec
 
     def __init__(
         self,
@@ -47,10 +47,18 @@ class TorchDataModule(L.LightningDataModule):
         self._per_gpu_batch_size = self.batch_size // world_size
 
         if stage in (None, "fit"):
-            self.train_dataset = Mp4WindowDataset(**OmegaConf.to_container(self.train_cfg, resolve=True))
-            self.val_dataset = Mp4WindowDataset(**OmegaConf.to_container(self.val_cfg, resolve=True))
+            self.train_dataset = self._build(self.train_cfg)
+            self.val_dataset = self._build(self.val_cfg)
         elif stage == "validate":
-            self.val_dataset = Mp4WindowDataset(**OmegaConf.to_container(self.val_cfg, resolve=True))
+            self.val_dataset = self._build(self.val_cfg)
+
+    def _build(self, cfg):
+        cls = self.dataset_cls
+        if cls is None:
+            from visnavkit.data.mp4_dataset import Mp4WindowDataset
+
+            cls = Mp4WindowDataset
+        return cls(**OmegaConf.to_container(cfg, resolve=True))
 
     def _dataloader(self, dataset, shuffle, drop_last=False):
         return DataLoader(

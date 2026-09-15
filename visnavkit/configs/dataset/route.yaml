@@ -1,0 +1,16 @@
+# Route patches only (route_images.npy sidecars) for visnavkit-train-route; no video decode.
+_target_: visnavkit.data.route_dataset.RouteDataModule
+batch_size: 64
+num_workers: 8
+prefetch_factor: 4
+pin_memory: true
+train_loader:
+  data_root: ${common.data_root}
+  file_list: train.txt
+  p_hflip: 0.5
+  shuffle: true
+val_loader:
+  data_root: ${common.data_root}
+  file_list: val.txt
+  p_hflip: 0.0
+  shuffle: false
