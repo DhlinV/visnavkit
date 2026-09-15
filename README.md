@@ -133,6 +133,27 @@ reproductions or checkpoint-compatible replacements.
 Anything that only reselects one group is an override, not a recipe:
 `model/action_decoder=flow_dit`, `model/vision_encoder=dinov3_s`.
 
+### Pretrained weights
+
+Released policies, one row per deployable variant. **Official** is the paper authors' own
+weights, **reproduced-ckpt** a VisNavKit training run, **reproduced-onnx** its
+`visnavkit-export` graph. Nothing is published yet — rows fill in as runs land.
+
+| Weights | Config | Model | Checkpoints (official) | Checkpoints (reproduced-ckpt) | Checkpoints (reproduced-onnx) |
+| --- | --- | --- | --- | --- | --- |
+| `gnm-point` | `gnm` + point goal | MobileNetV2 -> regression, 3.5M | — | — | — |
+| `flowpilot-edge` | `flowpilot` | FastViT-MA36 -> anchored flow DiT, 300M | — | — | — |
+
+```bash
+uv run visnavkit-train dataset=torch model=gnm model/goal_encoder=point \
+  ~model.goal_encoder.backbone_name ~model.goal_encoder.stack_observation  # gnm-point
+uv run visnavkit-train dataset=torch model=flowpilot                       # flowpilot-edge
+```
+
+Upstream weights are **not** loadable into these recipes — the architectures are adapted to this
+repo's data contract, so the tensors do not line up. Where each paper publishes its own, and the
+published ONNX exports `visnavkit-benchmark` downloads: [model catalog](docs/models.md).
+
 ## Data
 
 Each clip is a directory with `video.mp4` and four NumPy sidecars (times, positions,
@@ -150,9 +171,6 @@ Sidecar layout, the opt-in ego and calibration inputs, and the public corpora th
 targets (FrodoBots-2K, EgoWalk, NVIDIA PhysicalAI AV, OpenScene, RECON, SCAND, GoStanford2,
 SACSoN/HuRoN) with their licences:
 [data guide](docs/data.md).
-
-VisNavKit ships no trained policies — the recipes are architectures. What loads, and where each
-paper publishes its own weights: [model catalog](docs/models.md).
 
 ## Train, export, benchmark
 
