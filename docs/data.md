@@ -47,10 +47,10 @@ only.
 | EgoWalk | 50+ h egocentric walking, indoor and outdoor; RGB, depth, ZED poses, language goals | MIT | [EgoWalk/trajectories](https://huggingface.co/datasets/EgoWalk/trajectories) |
 | NVIDIA PhysicalAI AV | ~1700 h driving in 25 countries; 306k 20 s clips, 7 cameras, LiDAR, radar | NVIDIA AV Dataset Agreement | [nvidia/PhysicalAI-Autonomous-Vehicles](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles) |
 | OpenScene | 120+ h of nuPlan driving at 2 Hz; 8 cameras, occupancy labels | CC BY-NC-SA 4.0 + nuPlan agreement | [OpenDriveLab/OpenScene](https://github.com/OpenDriveLab/OpenScene) |
-| RECON | off-road exploration with goal images | see source | [project](https://sites.google.com/view/recon-robot/dataset) |
-| SCAND | socially compliant teleoperated navigation | see source | [project](https://www.cs.utexas.edu/~xiao/SCAND/SCAND.html#Links) |
-| GoStanford2 | indoor trajectories, the ViNT release | see source | [download](https://drive.google.com/drive/folders/1RYseCpbtHEFOsmSX2uqNY_kvSxwZLVP_?usp=sharing) |
-| SACSoN / HuRoN | indoor navigation among people | see source | [project](https://sites.google.com/view/sacson-review/huron-dataset) |
+| RECON | off-road exploration with goal images | MIT | [project](https://sites.google.com/view/recon-robot/dataset) |
+| SCAND | socially compliant teleoperated navigation | CC0 1.0 | [Texas Data Repository](https://doi.org/10.18738/T8/0PRYRH) |
+| GoStanford2 | indoor trajectories, the ViNT release | CC BY-NC-SA 3.0 | [GO Stanford](https://cvgl.stanford.edu/gonet/dataset/), [ViNT copy](https://drive.google.com/drive/folders/1RYseCpbtHEFOsmSX2uqNY_kvSxwZLVP_?usp=sharing) |
+| SACSoN / HuRoN | indoor navigation among people | MIT | [project](https://sites.google.com/view/sacson-review/huron-dataset) |
 
 The last four are ViNT's public training set, listed in
 [visualnav-transformer](https://github.com/robodhruv/visualnav-transformer).
