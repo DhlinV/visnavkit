@@ -124,10 +124,10 @@ reproductions or checkpoint-compatible replacements.
 | `mbra` | EfficientNet-B0 | causal x4, 1024-d, 4 heads | gps | regression |
 | `navdp` | DINOv2 ViT-S | causal x2, 384-d | point | diffusion DiT (384, x16), 10 steps, 16 candidates |
 | `s2e` | DINOv3 ViT-S | causal x6, 768-d | point, 55% goal dropout | anchor, 64 k-means anchors |
-| `socialnav` | FastViT-T8 | causal x1 | instruction (VLM prior) | flow DiT (1536, x12), 5 steps |
+| `socialnav` | SigLIP ViT-B/16 (frozen VLM tower) | causal x1, 2048-d | point + past positions | flow DiT (1536, x12), 5 steps |
 | `internvla_n1` | DINOv2 ViT-S | causal x1 | instruction (System 2 latent, 4 tokens) | flow DiT (384, x12), 10 steps |
 | `mimic` | DINOv3 ViT-S | causal x4, 512-d | point + camera token | anchor, 64 anchors |
-| `flowpilot` | FastViT-MA36 + speed head | causal x1, 1280-d | gps, 90% goal dropout | anchored flow DiT, 64 anchors, Beta(1.5, 1) times |
+| `flowpilot` | FastViT-MA36 + speed head | causal x4, 1280-d | gps, 90% goal dropout | anchored flow DiT (1280, x4), 64 anchors, 4 steps, Beta(1.5, 1) times |
 
 `model=base` is the bare skeleton these inherit — the stage wiring with no paper attached.
 Anything that only reselects one group is an override, not a recipe:

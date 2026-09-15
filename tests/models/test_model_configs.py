@@ -48,10 +48,10 @@ def _targets(cfg):
         ("mbra", ("TimmCNNEncoder", "CausalTemporalEncoder", "gps", "RegressionDecoder"), 4),
         ("navdp", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "GenerativeDecoder"), 2),
         ("s2e", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "AnchorDecoder"), 6),
-        ("socialnav", ("TimmCNNEncoder", "CausalTemporalEncoder", "instruction", "GenerativeDecoder"), 1),
+        ("socialnav", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "GenerativeDecoder"), 1),
         ("internvla_n1", ("TimmViTEncoder", "CausalTemporalEncoder", "instruction", "GenerativeDecoder"), 1),
         ("mimic", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "AnchorDecoder"), 4),
-        ("flowpilot", ("TimmCNNEncoder", "CausalTemporalEncoder", "gps", "GenerativeDecoder"), 1),
+        ("flowpilot", ("TimmCNNEncoder", "CausalTemporalEncoder", "gps", "GenerativeDecoder"), 4),
     ],
 )
 def test_recipes_select_expected_components(recipe, expected, layers):
@@ -278,13 +278,27 @@ def test_pretrained_block_is_available_without_plus():
 
 
 def test_flowpilot_recipe_follows_the_paper_knobs():
-    """Anchored rectified flow with Beta(1.5, 1) times and the displacement auxiliary loss."""
+    """Table 10: 4x8 scene and flow transformers over 1280-d tokens, 64 anchors, 4 steps."""
     cfg = _compose("model=flowpilot")
     decoder = cfg.model.action_decoder
     assert cfg.model.vision_encoder.speed_head is True
+    assert (cfg.model.feat_size, cfg.model.goal_encoder.p_drop) == (1280, 0.9)
+    assert (cfg.model.temporal_encoder.num_layers, cfg.model.temporal_encoder.num_heads) == (4, 8)
+    assert (decoder.denoiser.depth, decoder.denoiser.num_heads) == (4, 8)
+    assert (decoder.anchors.num_anchors, decoder.sample_steps) == (64, 4)
     assert decoder.anchors._target_.endswith("AnchorSet")
     assert decoder.scheduler.time_sampling == "beta"
     assert (decoder.scheduler.beta_alpha, decoder.scheduler.beta_beta) == (1.5, 1.0)
+
+
+def test_socialnav_recipe_follows_the_paper_knobs():
+    """Table 5: a point goal and past positions into a 1536-d, 12x12 action expert, 5 steps."""
+    cfg = _compose("model=socialnav", "dataset=torch", "common.ego_features=[past_xy]")
+    decoder = cfg.model.action_decoder
+    assert cfg.model.feat_size == 2048  # the Brain's hidden width
+    assert cfg.model.modality_encoders.ego.in_dim == 2
+    assert (decoder.denoiser.hidden, decoder.denoiser.depth, decoder.denoiser.num_heads) == (1536, 12, 12)
+    assert decoder.sample_steps == 5
 
 
 def test_ema_group_is_optional_and_builds_a_trainer_callback():

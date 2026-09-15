@@ -1,14 +1,19 @@
-# FlowPilot-style (arXiv:2606.12603, CoRL 2026, He/Liu/Ma/Zhou, VAIL-UCLA): a FastViT-MA36
-# encoder over pair-stacked frames with an auxiliary per-frame head, the GPS goal token dropped
-# at p = 0.9, and an anchored rectified-flow decoder — 64 k-means anchors, 4 layers, 8 heads,
-# 1280-d tokens, 4 inference steps, Beta(1.5, 1) times (paper §3.2, Table 10). Read off the
-# paper: github.com/VAIL-UCLA/FlowPilot is still a placeholder, so nothing here is checked
-# against released code. Known differences: arc-fan anchors unless an NPZ k-means vocabulary is
-# supplied, the auxiliary head regresses per-frame speed where the paper regresses frame-to-frame
-# displacement, plain attention pooling instead of gated cross-attention, and no human-preference
-# alignment stage.
+# FlowPilot-style (arXiv:2606.12603, CoRL 2026, He/Liu/Ma/Zhou, VAIL-UCLA): eleven 352x128
+# frames at 20 Hz through a FastViT-MA36 encoder over stacked (RGB_t, RGB_t-1) pairs, a 4-layer
+# 8-head scene transformer over 1280-d tokens, a GPS goal token dropped at p = 0.9, and an
+# anchored rectified-flow decoder — 64 k-means anchors, a 4-layer 8-head flow transformer,
+# 4 inference steps, Beta(1.5, 1) times, dropout 0.1 (paper Sec. 3.2, Appendix E.4 Table 10).
+# Read off the paper: github.com/VAIL-UCLA/FlowPilot is still a placeholder, so nothing here is
+# checked against released code.
+# Differences: arc-fan anchors unless an NPZ k-means vocabulary is supplied, and the paper's
+# anchors span 20 steps at 5 Hz over (dx, dy, dtheta) where the targets here are x/y/speed; the
+# auxiliary head regresses per-frame speed where the paper regresses frame-to-frame displacement;
+# every frame contributes one global token, where the paper pools the past frames and keeps patch
+# tokens for the current one; attention pooling instead of gated cross-attention; and no
+# human-preference alignment stage.
 defaults:
   - base
+  - override temporal_encoder: causal_4layer
   - override goal_encoder: gps
   - override action_decoder: anchor_flow_dit
   - _self_
@@ -29,5 +34,6 @@ action_decoder:
     hidden: 1280
     depth: 4
     num_heads: 8
+    dropout: 0.1
   scheduler:
     time_sampling: beta

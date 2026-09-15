@@ -1,14 +1,29 @@
-# SocialNav-style (arXiv:2511.21135, AMAP-EAI): the Action Expert half — a conditional
-# flow-matching DiT of hidden 1536, 12 layers and 12 heads sampled for 5 steps (paper §5.1),
-# driven by the semantic prior its VLM Brain produces, which arrives here as a precomputed
-# embedding on the instruction goal. Differences: no VLM, so no chain-of-thought or
-# social-traversability prediction, and no SAFE-GRPO stage; the paper does not state the
-# Action Expert's visual backbone, so this keeps the default.
+# SocialNav-style (arXiv:2511.21135, CVPR 2026): the paper's task is history-conditioned
+# point-goal navigation "similar to CityWalker" — six frames (n=5 past plus the current one),
+# their 2D positions and a 2D target go to a frozen VLM Brain, whose last-layer features
+# condition an Action Expert: a conditional-flow-matching DiT of hidden 1536, 12 layers and
+# 12 heads, sampled for K=5 steps (paper Eq. 1-3, Sec. 5.1 and Table 5). `feat_size` is the
+# Brain's hidden width, because those last-layer features are what the expert reads.
+# The Brain is Qwen2.5-VL-3B: timm carries no Qwen tower, so its vision half stands in as a
+# frozen language-supervised SigLIP ViT-B/16, and its 36-layer LLM — the chain-of-thought,
+# the socially-traversable polygons, the VQA — has no analogue in this contract.
+# Differences: frame fusion is the base one-layer causal stack, not the Brain's LLM; attention
+# stays causal for per-frame online supervision; and SAFE-GRPO, a closed-loop RL stage, is out
+# of scope.
 defaults:
   - base
-  - override goal_encoder: instruction
+  - override vision_encoder: siglip_b
+  - override temporal_encoder: causal
+  - override goal_encoder: point
+  - override modality_encoder: ego
   - override action_decoder: flow_dit
   - _self_
+
+feat_size: 2048
+
+modality_encoders:
+  ego:
+    in_dim: 2  # the paper's per-frame 2D positions (set common.ego_features=[past_xy])
 
 action_decoder:
   sample_steps: 5
