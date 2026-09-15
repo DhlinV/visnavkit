@@ -9,17 +9,14 @@ encoder works with any goal, extra input and decoder. Ego state and camera calib
 inputs; anything else (depth, LiDAR, a spatial raster) is one encoder subclass plus a yaml.
 
 ```text
-vision   (B, F, 3, H, W) ──▶ vision encoder ───┐
-ego      (B, F, E)       ──▶ modality: ego ────┤  per-frame
-K, RT    (B,F,3,3/4,4)   ──▶ modality: camera ─┤  tokens (F, K, D)
-<yours>                  ──▶ modality: ... ────┘
-                                               │
-                                               ▼
-                                        temporal encoder ──▶ action decoder ──▶ trajectory
-                                          context (K, D)    ▲    plans (M, T, pose)
-                                                            │
-goal (one per goal encoder) ──▶ goal encoder(s) ────────────┘  goal tokens (G, D)
+context   vision   (B, F, 3, H, W)                            ─┐
+          ego      (B, F, E)                                  ─┤
+          camera   K (B, F, 3, 3), RT (B, F, 4, 4)            ─┼──▶  policy  ──▶  actions (B, M, T, D)
+          <yours>  (B, F, ...)                                ─┤
+goal      point · gps · image · route · instruction · <yours> ─┘
 ```
+
+B batch, F frames, M candidates, T steps, D pose; every input but vision is optional.
 
 [Architecture](docs/architecture.md) · [Data](docs/data.md) · [Models & weights](docs/models.md) · [Benchmark](docs/benchmark.md) · [Roadmap](docs/roadmap.md)
 
