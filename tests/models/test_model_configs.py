@@ -47,7 +47,7 @@ def _targets(cfg):
         ("citywalker", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "RegressionDecoder"), 16),
         ("mbra", ("TimmCNNEncoder", "CausalTemporalEncoder", "gps", "RegressionDecoder"), 4),
         ("navdp", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "GenerativeDecoder"), 2),
-        ("s2e", ("TimmCNNEncoder", "CausalTemporalEncoder", "point", "AnchorDecoder"), 4),
+        ("s2e", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "AnchorDecoder"), 6),
         ("socialnav", ("TimmCNNEncoder", "CausalTemporalEncoder", "instruction", "GenerativeDecoder"), 1),
         ("internvla_n1", ("TimmViTEncoder", "CausalTemporalEncoder", "instruction", "GenerativeDecoder"), 1),
         ("mimic", ("TimmViTEncoder", "CausalTemporalEncoder", "point", "AnchorDecoder"), 4),

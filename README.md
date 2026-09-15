@@ -123,7 +123,7 @@ reproductions or checkpoint-compatible replacements.
 | `citywalker` | DINOv2 ViT-B (frozen) | causal x16, 768-d | point + past odometry | regression |
 | `mbra` | EfficientNet-B0 | causal x4, 1024-d, 4 heads | gps | regression |
 | `navdp` | DINOv2 ViT-S | causal x2, 384-d | point | diffusion DiT (384, x16), 10 steps, 16 candidates |
-| `s2e` | EfficientNet-B0 | causal x4, 768-d | point, 50% goal dropout | anchor, 8 anchors |
+| `s2e` | DINOv3 ViT-S | causal x6, 768-d | point, 55% goal dropout | anchor, 64 k-means anchors |
 | `socialnav` | FastViT-T8 | causal x1 | instruction (VLM prior) | flow DiT (1536, x12), 5 steps |
 | `internvla_n1` | DINOv2 ViT-S | causal x1 | instruction (System 2 latent, 4 tokens) | flow DiT (384, x12), 10 steps |
 | `mimic` | DINOv3 ViT-S | causal x4, 512-d | point + camera token | anchor, 64 anchors |

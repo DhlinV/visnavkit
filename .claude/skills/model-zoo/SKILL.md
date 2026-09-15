@@ -18,7 +18,7 @@ encoder x temporal encoder x goal encoder x action decoder — purely via yaml
 | vint | efficientnet_b0 | causal_4layer (512-d) | image (stack_observation) | regression |
 | nomad | efficientnet_b0 | causal_4layer (256-d) | image, p_drop 0.5 | diffusion_unet, 10 steps |
 | citywalker | dinov2_b (frozen) | causal x16 (768-d) | point + ego past_xy | regression |
-| s2e | efficientnet_b0 | causal_4layer (768-d) | point, p_drop 0.5 | anchor (8) |
+| s2e | dinov3_s (frozen) | causal x6 (768-d) | point, p_drop 0.55 | anchor (64, k-means) |
 | dinov2 / dinov3 | DINO ViT-S (frozen) | causal x1 | none | mhp |
 | diffusion / flow_dit / anchor | fastvit_t8 | causal x1 | none | diffusion_mlp / flow_dit / anchor |
 

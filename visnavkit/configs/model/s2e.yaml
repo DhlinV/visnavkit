@@ -1,14 +1,16 @@
-# S2E-style (arXiv:2507.22028): ImageNet-pretrained EfficientNet-B0 tokenizer, a 4-layer 8-head
-# transformer over 768-d tokens with feed-forward 3072 (paper Table 10), point goal
-# (distance, cos, sin), and an anchor-guided mixture head over 8 forward-sampled anchors, which
-# the paper's ablation picks (Table 6). Differences: goal dropout is how this repo trains the
-# goal-free mode the release also exposes, and the paper states no probability for it; the arc
-# fan stands in for the paper's uniformly sampled intention points; the RL post-training stage
-# (residual attention blocks, PPO) is out of scope.
+# S2E-style (arXiv:2507.22028v2, ICLR 2026): the camera-ready architecture — a DINOv3 encoder
+# (the paper does not state the variant), a 6-layer 8-head stack over 768-d tokens with
+# feed-forward 3072, and an anchor-guided GMM decoder with a per-mode velocity scale. Its anchors
+# are k-means centroids over the corpus, so pass an NPZ from `visnavkit-dataset command=anchors
+# num_anchors=64` — 64 is the count the paper's ablation prefers. Version v1 of the paper
+# described an EfficientNet-B0 encoder over 4 layers; this follows v2.
+# Differences: the paper masks its point and image goals jointly (0.35 neither, 0.20 image only,
+# 0.40 point only, 0.05 both), which leaves the point goal missing 55% of the time here; the RL
+# post-training stage (residual-attention blocks, PPO) is out of scope.
 defaults:
   - base
-  - override vision_encoder: efficientnet_b0
-  - override temporal_encoder: causal_4layer
+  - override vision_encoder: dinov3_s
+  - override temporal_encoder: causal
   - override goal_encoder: point
   - override action_decoder: anchor
   - _self_
@@ -16,11 +18,12 @@ defaults:
 feat_size: 768
 
 temporal_encoder:
+  num_layers: 6
   ff_dim: 3072
 
 goal_encoder:
-  p_drop: 0.5
+  p_drop: 0.55
 
 action_decoder:
   anchors:
-    num_anchors: 8
+    num_anchors: 64
