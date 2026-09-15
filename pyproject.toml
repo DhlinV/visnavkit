@@ -1,7 +1,7 @@
 [project]
 name = "visnavkit"
 version = "0.1.0"
-description = "A composable toolkit for visual navigation policies: train, export to ONNX, benchmark"
+description = "Visual navigation models, training, ONNX export, and open-loop benchmarks"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
