@@ -295,7 +295,7 @@ def test_socialnav_recipe_follows_the_paper_knobs():
     """Table 5: a point goal and past positions into a 1536-d, 12x12 action expert, 5 steps."""
     cfg = _compose("model=socialnav", "dataset=torch", "common.ego_features=[past_xy]")
     decoder = cfg.model.action_decoder
-    assert cfg.model.feat_size == 2048  # the Brain's hidden width
+    assert cfg.model.feat_size == 1536  # the action expert's width
     assert cfg.model.modality_encoders.ego.in_dim == 2
     assert (decoder.denoiser.hidden, decoder.denoiser.depth, decoder.denoiser.num_heads) == (1536, 12, 12)
     assert decoder.sample_steps == 5
