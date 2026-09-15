@@ -201,7 +201,7 @@ If VisNavKit helps your work, please consider citing it:
 @Misc{visnavkit2026,
   author       = {Honglin He and Bolei Zhou},
   title        = {{VisNavKit}: a composable toolkit for visual navigation policies},
-  howpublished = {\url{https://github.com/DhlinV/visnavkit}},
+  howpublished = {\url{https://github.com/VAIL-UCLA/visnavkit}},
   year         = {2026},
 }
 ```

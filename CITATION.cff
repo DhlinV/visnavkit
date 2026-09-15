@@ -11,7 +11,7 @@ authors:
     given-names: Honglin
   - family-names: Zhou
     given-names: Bolei
-repository-code: "https://github.com/DhlinV/visnavkit"
+repository-code: "https://github.com/VAIL-UCLA/visnavkit"
 license: MIT
 keywords:
   - visual-navigation
