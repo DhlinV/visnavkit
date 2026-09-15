@@ -4,6 +4,11 @@
 
 **A composable toolkit for visual navigation policies: train, export to ONNX, benchmark.**
 
+VisNavKit turns a navigation paper into a config. Eleven architectures — GNM, ViNT, NoMaD,
+CityWalker, MBRA, NavDP, S2E, SocialNav, InternVLA-N1, MIMIC and FlowPilot — are recipes over one
+data contract (video clips plus pose sidecars), so they train on the same corpora, export through
+the same ONNX path and score on the same open-loop benchmark.
+
 Vision in, trajectory out. Every stage is a Hydra group exchanging tokens of one width, so any
 encoder works with any goal, extra input and decoder. Ego state and camera calibration ship as
 inputs; anything else (depth, LiDAR, a spatial raster) is one encoder subclass plus a yaml.
