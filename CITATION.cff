@@ -9,6 +9,8 @@ type: software
 authors:
   - family-names: He
     given-names: Honglin
+  - family-names: Zhou
+    given-names: Bolei
 repository-code: "https://github.com/DhlinV/visnavkit"
 license: MIT
 keywords:

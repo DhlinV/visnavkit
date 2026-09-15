@@ -241,7 +241,7 @@ If VisNavKit helps your work, please consider citing it:
 
 ```bibtex
 @Misc{visnavkit2026,
-  author       = {Honglin He},
+  author       = {Honglin He and Bolei Zhou},
   title        = {{VisNavKit}: a composable toolkit for visual navigation policies},
   howpublished = {\url{https://github.com/DhlinV/visnavkit}},
   year         = {2026},
