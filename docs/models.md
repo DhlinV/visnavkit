@@ -1,25 +1,20 @@
 # Model catalog and integration status
 
-The catalog identifies GNM, ViNT, NoMaD, CityWalker, S2E, MIMIC by Honglin He at
-VAIL-UCLA, NavDP, and MBRA. It records research identity separately from this
-repository's trainable architecture adaptations. **Downloadable ONNX artifacts
-are not yet validated open-loop policy adapters.**
+The catalog records each model's research identity separately from this repository's
+trainable architecture adaptations. **Downloadable ONNX artifacts are not yet
+validated open-loop policy adapters.**
 
 ## Release provenance
 
 The [UCLA-VAIL model zoo](https://huggingface.co/UCLA-VAIL/Navigation-Model-Zoo-Public)
-contains published ONNX exports and accompanying wrappers. The catalog pins
-revision `9c1f523ef8dddbccb6dee1d3d588112f754bc8f2`, verified on 2026-09-07.
-Per-file byte sizes and SHA-256 digests are in
-[`catalog.py`](../visnavkit/benchmark/catalog.py). LFS digests come from the
-[pinned public manifest](https://huggingface.co/api/models/UCLA-VAIL/Navigation-Model-Zoo-Public/tree/9c1f523ef8dddbccb6dee1d3d588112f754bc8f2?recursive=true&expand=false).
-The 69,632-byte NoMaD distance-head external data file is an ordinary Git blob;
-its SHA-256 was calculated directly from that revision's bytes.
+holds the published ONNX exports and their wrappers. The catalog pins revision
+`9c1f523ef8dddbccb6dee1d3d588112f754bc8f2`, verified on 2026-09-07; per-file sizes
+and SHA-256 digests are in [`catalog.py`](../visnavkit/benchmark/catalog.py), taken
+from the [pinned manifest](https://huggingface.co/api/models/UCLA-VAIL/Navigation-Model-Zoo-Public/tree/9c1f523ef8dddbccb6dee1d3d588112f754bc8f2?recursive=true&expand=false).
 
-The downloader retrieves only `.onnx` and `.onnx.data` artifacts. It streams into
-temporary files, checks length and SHA-256, and atomically installs each completed
-file. Interrupted bundles can be retried: already verified files are reused.
-Keep external data beside its associated graph. No remote Python is imported.
+The downloader takes only `.onnx` and `.onnx.data`, streams to a temporary file, checks
+length and SHA-256, and installs atomically, so an interrupted bundle can be retried.
+Keep external data beside its graph. No remote Python is imported.
 
 ```python
 from dataclasses import asdict
@@ -32,10 +27,10 @@ print(asdict(get_model("mimic")))
 paths = download_model("gnm", "artifacts/models")  # explicit network download
 ```
 
-The `MODELS` mapping is read-only. `register_model(ModelSpec(...))` adds metadata
-with case-insensitive duplicate protection. Registration does not validate
-inference. Custom entries without artifacts can describe user-provided model
-files. Built-in `Artifact` URLs refer to the pinned zoo release.
+`MODELS` is read-only; `register_model(ModelSpec(...))` adds an entry
+(case-insensitive duplicate protection) without validating inference, so a custom
+entry can describe your own model files. Built-in `Artifact` URLs point at the pinned
+zoo release.
 
 ## Research identity and supported artifacts
 
@@ -46,16 +41,15 @@ files. Built-in `Artifact` URLs refer to the pinned zoo release.
 | `nomad` | [NoMaD / official code](https://github.com/robodhruv/visualnav-transformer) | Three component graphs; four RGB frames, 96×96 | `nomad` uses a 1D U-Net denoiser with goal dropout; sampler and normalization differ |
 | `citywalker` | [CityWalker](https://github.com/ai4ce/CityWalker) | Five RGB frames, 350×630, past coordinates and point-goal | `citywalker` follows the paper's frozen DINOv2-B and 16-layer stack; past odometry arrives as the `past_xy` ego feature; attention stays causal, not bidirectional |
 | `s2e` | [S2E](https://github.com/VAIL-UCLA/S2E) | BC Web100 variant; eleven RGB frames, 256×256, point-goal | `s2e` follows the ICLR 2026 camera-ready: DINOv3 encoder, 6-layer stack, 64 k-means anchors; no RL stage |
-| `mimic` | [MIMIC, Honglin He et al.](https://github.com/VAIL-UCLA/MIMIC) | Goal-free variant; sixteen RGB frames, 288×512; fixed batch one | `mimic` follows the paper: DINOv3-S, goal and camera tokens, 64-anchor decoder; the published export is its goal-free variant |
+| `mimic` | [VAIL-UCLA/MIMIC](https://github.com/VAIL-UCLA/MIMIC) | Goal-free variant; sixteen RGB frames, 288×512; fixed batch one | `mimic` follows the paper: DINOv3-S, goal and camera tokens, 64-anchor decoder; the published export is its goal-free variant |
 | `navdp` | [NavDP](https://github.com/InternRobotics/NavDP) | No verified public ONNX bundle; checkpoint access via author form | `navdp` is a point-goal diffusion-DiT adaptation; RGB only (the depth branch belongs in a modality encoder) and no privileged critic |
 | `mbra` | [MBRA / LogoNav](https://github.com/NHirose/Learning-to-Drive-Anywhere-with-MBRA) | Six RGB frames, 96×96, point-goal pose | `mbra` is the LogoNav architecture (EfficientNet-B0 + local GPS goal + regression, 1024-d x4); its goal pose omits the paper's heading; the reannotation pipeline is a data stage |
 
-Input resolution is `(height, width)`. Native size/FLOP/timing results must carry
-`architecture_adaptation` provenance; a paper name in Hydra does not establish
-checkpoint compatibility. Published exports have `published_export_variant`
-provenance and `artifacts_available` status until reference parity and semantic
-adapters are verified. NavDP is `external_integration_pending` / `unavailable`;
-attempting to download it raises `ModelUnavailableError` with the reason.
+Input resolution is `(height, width)`. A paper name in Hydra establishes no checkpoint
+compatibility: size, FLOP and timing results carry `architecture_adaptation` provenance,
+and published exports stay `published_export_variant` / `artifacts_available` until
+reference parity and semantic adapters are verified. NavDP is
+`external_integration_pending` / `unavailable`; downloading it raises `ModelUnavailableError`.
 
 ## Required contract checks
 
@@ -96,21 +90,18 @@ attempting to download it raises `ModelUnavailableError` with the reason.
   [Repository](https://github.com/InternRobotics/NavDP),
   [agent input processing](https://github.com/InternRobotics/NavDP/blob/master/baselines/navdp/policy_agent.py)
 
-`output_names` are source-reported hints. NoMaD components have separate
-interfaces, so its aggregate output-name tuple is empty. Only MIMIC currently has
-source-verified output timestamps. `output_scale_to_meters=None` and
-`output_contract_verified=False` flag conversions as pending. Inspect actual
-tensor metadata and verify nonzero-input numerical parity before assigning a
-stronger status.
+`output_names` are source-reported hints, and NoMaD's is empty because its components
+have separate interfaces. Only MIMIC has source-verified output timestamps.
+`output_scale_to_meters=None` with `output_contract_verified=False` means the conversion
+is pending: inspect the real tensor metadata and check nonzero-input parity before
+claiming more.
 
 ## Fair comparisons and licensing
 
-Keep RGB goal-free, RGB image-goal, RGB point-goal with odometry, and RGB-D in
-explicit cohorts. Missing modalities cannot be replaced silently with zeros.
-Separate full-policy latency from component timing, and artifact bytes/exported
-initializer elements from training parameter count. Shared diffusion parameters
-count once, while denoiser FLOPs repeat for every executed step. Unsupported
-operations remain visible in compute reports.
+Keep RGB goal-free, RGB image-goal, RGB point-goal with odometry and RGB-D in separate
+cohorts; a missing modality is never silently zero-filled. Report full-policy latency
+apart from component timing, and artifact bytes apart from training parameter count —
+shared diffusion parameters count once, denoiser FLOPs repeat for every executed step.
 
 The zoo declares Apache-2.0 while preserving original model terms. GNM, ViNT and
 NoMaD's source repository is MIT; CityWalker is Apache-2.0; NavDP's code is
@@ -146,9 +137,9 @@ licence.
 | `mbra` | [Learning-to-Drive-Anywhere-with-MBRA](https://github.com/NHirose/Learning-to-Drive-Anywhere-with-MBRA) | LogoNav image-goal and GPS-goal |
 | `navdp` | [InternRobotics/NavDP](https://github.com/InternRobotics/NavDP) | checkpoint access by author form |
 | `s2e` | [VAIL-UCLA/S2E](https://github.com/VAIL-UCLA/S2E) | BC weights only; the RL stage is unreleased |
-| `socialnav` | [AMAP-EAI/SocialNav](https://github.com/AMAP-EAI/SocialNav) | — |
+| `socialnav` | [AMAP-EAI/SocialNav](https://github.com/AMAP-EAI/SocialNav) | Qwen2-VL and Qwen2.5-VL Brains; the dataset stays unreleased |
 | `internvla_n1` | [InternRobotics/InternVLA-N1](https://huggingface.co/InternRobotics/InternVLA-N1) | `-System2`, `-DualVLN`, `-Preview`, `-wo-dagger` |
-| `mimic` | [UCLA-VAIL zoo](https://huggingface.co/UCLA-VAIL/Navigation-Model-Zoo-Public) | goal-free ONNX export; training code pending |
+| `mimic` | [VAIL-UCLA/MIMIC](https://github.com/VAIL-UCLA/MIMIC), [UCLA-VAIL zoo](https://huggingface.co/UCLA-VAIL/Navigation-Model-Zoo-Public) | inference and augmentation code plus the goal-free ONNX export; training code and torch checkpoints planned |
 | `flowpilot` | [VAIL-UCLA/FlowPilot](https://github.com/VAIL-UCLA/FlowPilot) | repository is still a placeholder |
 
-The zoo exports in the last two rows are the ones `visnavkit-benchmark` downloads; see above for their pinned digests and the caveats on each.
+`visnavkit-benchmark` downloads the zoo exports catalogued above; the caveats on each are in the contract checks.
