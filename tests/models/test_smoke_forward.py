@@ -80,7 +80,10 @@ def test_modalities_and_speed_head_are_opt_in():
 
 @pytest.mark.parametrize("recipe", ["gnm", "nomad"])
 def test_recipe_training_loss(recipe):
-    cfg, model, (vision, goal, modalities), _ = _forward([f"model={recipe}", "model.vision_encoder.speed_head=true"])
+    # Train mode keeps activations for backward: at the default 320x240 x 10 frames that is ~6 GB, so a small window.
+    small = ["common.seq_length=3", "common.crop_wh=[64,64]", "common.downscale_factor=1"]
+    overrides = [f"model={recipe}", "model.vision_encoder.speed_head=true", *small]
+    cfg, model, (vision, goal, modalities), _ = _forward(overrides)
     model.train()
     y = model(vision, goal=goal, **modalities)
     n = y.vision.speed.shape[0]
