@@ -37,6 +37,18 @@ goals, speed-only ego). `visnavkit-train-route route=ae|vae` trains a route-patc
 `route_images.npy` sidecars alone (`dataset=route`, no decode); its checkpoint seeds a policy with
 `model/goal_encoder=route_image model.goal_encoder.weights=<ckpt>`. Tiny example corpora, fetched into [`assets/datasets/`](../assets/), back the tests.
 
+`dataset=pose` puts the window on a fixed slot grid: the ego state at `common.seq_length` slots `hz`
+apart ending at the current frame (`past_xy`, `yaw`, `speed`, `yaw_rate` in the current frame, packed
+into `ego`), every slot's future poses (`pose_size` 2 | 3 | 5 = x, y | x, y, v | x, y, yaw, v, w) and
+point / gps goals, one window every `stride_s` seconds, so every source frame rate yields the same
+window. `frames: true` adds `vision` — the source frame nearest each slot when it lies within half a
+slot, zeros otherwise — with `frame_mask`; `route_hw` adds `route_patch` + `route_mask` from a
+`route_labels.npy` (N, h, w) uint8 class-id sidecar; `embodiment_ids` {corpus dir: id} and an
+`action_bounds` JSON {corpus dir: [[lo x 5], [hi x 5]]} add `embodiment_id` and `action_bounds` (the
+corpus is the clip's first directory under `data_root`). `common.uniform_t_anchors=true` puts the
+`plan_len_points` anchors on a fixed rate (`plan_len_seconds / plan_len_points` s apart) instead of the
+quadratic grid, in every dataset and the action space alike.
+
 ## Public corpora
 
 Each needs a one-off conversion into the clip layout; converters are not bundled, since the

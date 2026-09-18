@@ -119,7 +119,11 @@ def past_xy_targets(frame_positions, frame_orientations, seq_idxs) -> np.ndarray
 
 def goal_point_targets(frame_positions, frame_orientations, seq_idxs, goal_idx: int) -> np.ndarray:
     """``(S, 3)`` point goal per observed frame: distance (m), cos and sin of the bearing."""
-    local = goal_local_targets(frame_positions, frame_orientations, seq_idxs, goal_idx)
+    return point_goal_from_local(goal_local_targets(frame_positions, frame_orientations, seq_idxs, goal_idx))
+
+
+def point_goal_from_local(local: np.ndarray) -> np.ndarray:
+    """``(S, 2)`` ego-frame goal offsets -> ``(S, 3)`` distance (m), cos and sin of the bearing."""
     distance = np.hypot(local[:, 0], local[:, 1])
     moving = distance > 1e-6
     safe = np.where(moving, distance, 1.0)

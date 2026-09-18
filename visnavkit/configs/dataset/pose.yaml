@@ -1,0 +1,55 @@
+# Slot-grid windows (visnavkit.data.pose_dataset): the ego state at seq_len slots 1 / hz s apart ending
+# at the current frame + every slot's future poses, interpolated from the pose sidecars; frames optional
+# (the source frame nearest each slot + frame_mask), route patches and embodiment ids opt-in.
+# Same manifests, targets and goals as dataset=torch; `ego` from common.ego_features (past_xy, yaw,
+# speed, yaw_rate; the ego encoder's in_dim must match the width).
+_target_: visnavkit.data.pose_dataset.PoseDataModule
+batch_size: 256
+num_workers: 8
+prefetch_factor: 4
+pin_memory: true
+train_loader:
+  data_root: ${common.data_root}
+  file_list: train.txt
+  seq_len: ${common.seq_length}  # slots; with hz 20, 20 slots = the past second
+  hz: 20
+  stride_s: 1.0  # seconds between consecutive current frames of a clip (any source frame rate)
+  plan_len_seconds: ${common.plan_len_seconds}
+  plan_len_points: ${common.plan_len_points}
+  offset_t_anchors: ${common.offset_t_anchors}
+  uniform_t_anchors: ${common.uniform_t_anchors}
+  pose_size: 3  # future_poses channels: 2 (x, y) | 3 (x, y, v) | 5 (x, y, yaw, v, w)
+  goal_type: ${goal_types:${model.goal_encoder}}  # none | point | gps (image goals need frames)
+  goal_horizon_s: ${common.goal_horizon_s}
+  ego_features: ${common.ego_features}
+  frames: false  # decode the frame nearest each slot -> vision (S, 3, h, w) + frame_mask
+  frame_wh: null  # resize decoded frames to [w, h]
+  route_hw: null  # [h, w]: route_patch from the route_labels.npy sidecar + route_mask
+  embodiment_ids: null  # {corpus dir: id} -> embodiment_id
+  action_bounds: null  # JSON {corpus dir: [[lo x 5], [hi x 5]]} -> action_bounds (2, 5)
+  p_hflip: 0.5
+  no_flip: []  # clip path substrings never mirrored, e.g. [nvidia, openscene, navsim]: keep the side of the road
+  shuffle: true
+
+val_loader:
+  data_root: ${common.data_root}
+  file_list: val.txt
+  seq_len: ${common.seq_length}
+  hz: 20
+  stride_s: 1.0
+  plan_len_seconds: ${common.plan_len_seconds}
+  plan_len_points: ${common.plan_len_points}
+  offset_t_anchors: ${common.offset_t_anchors}
+  uniform_t_anchors: ${common.uniform_t_anchors}
+  pose_size: 3
+  goal_type: ${goal_types:${model.goal_encoder}}
+  goal_horizon_s: ${common.goal_horizon_s}
+  ego_features: ${common.ego_features}
+  frames: false
+  frame_wh: null
+  route_hw: null
+  embodiment_ids: null
+  action_bounds: null
+  p_hflip: 0.0
+  no_flip: []
+  shuffle: false
