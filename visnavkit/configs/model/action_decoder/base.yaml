@@ -9,6 +9,7 @@ action_space:
   plan_len_seconds: ${plan_len_seconds}
   plan_len_points: ${plan_len_points}
   offset_t_anchors: ${common.offset_t_anchors}
+  uniform_t_anchors: ${common.uniform_t_anchors}
 normalizer:
   _target_: visnavkit.models.action.normalizer.ActionNormalizer
   mode: none  # none | meanstd | minmax (stats_path: NPZ with mean/std or min/max)

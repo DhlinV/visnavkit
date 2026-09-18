@@ -24,7 +24,7 @@ from visnavkit.data.file_list import (
     write_file_list_frame_ranges,
 )
 from visnavkit.data.pose_targets import dali_pose_target_loader, target_safe_frame_ranges
-from visnavkit.utils.common import build_idxs
+from visnavkit.utils.common import anchor_times
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +238,7 @@ class DaliDataset:
         plan_len_seconds=3,
         plan_len_points=10,
         offset_t_anchors=False,
+        uniform_t_anchors=False,
         use_full_pose=False,
         crop_xy=(0, 0),
         crop_wh=(1920, 1080),
@@ -310,10 +311,7 @@ class DaliDataset:
         if plan_len_points < 2 or not np.isfinite(plan_len_seconds) or plan_len_seconds <= 0:
             raise ValueError("plan_len_points must be >= 2 and plan_len_seconds must be positive and finite")
         # offset: drop the degenerate t=0 anchor; all anchors strictly in the future
-        if offset_t_anchors:
-            self.t_anchors = build_idxs(plan_len_seconds, plan_len_points + 1)[1:]
-        else:
-            self.t_anchors = build_idxs(plan_len_seconds, plan_len_points)
+        self.t_anchors = anchor_times(plan_len_seconds, plan_len_points, offset_t_anchors, uniform_t_anchors)
         self.num_pts = plan_len_points  # Legacy argument; the horizon is timestamp-based.
 
         self.data_root = Path(data_root)

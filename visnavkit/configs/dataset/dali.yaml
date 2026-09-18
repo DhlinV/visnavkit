@@ -20,6 +20,7 @@ train_loader:
   plan_len_seconds: ${common.plan_len_seconds}
   plan_len_points: ${common.plan_len_points}
   offset_t_anchors: ${common.offset_t_anchors}
+  uniform_t_anchors: ${common.uniform_t_anchors}
   use_full_pose: ${common.use_full_pose}
   crop_xy: ${common.crop_xy}
   crop_wh: ${common.crop_wh}
@@ -53,6 +54,7 @@ val_loader:
   plan_len_seconds: ${common.plan_len_seconds}
   plan_len_points: ${common.plan_len_points}
   offset_t_anchors: ${common.offset_t_anchors}
+  uniform_t_anchors: ${common.uniform_t_anchors}
   use_full_pose: ${common.use_full_pose}
   crop_xy: ${common.crop_xy}
   crop_wh: ${common.crop_wh}

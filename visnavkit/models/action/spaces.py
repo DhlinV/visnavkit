@@ -5,7 +5,7 @@ import math
 import torch
 import torch.nn as nn
 
-from visnavkit.utils.common import build_idxs
+from visnavkit.utils.common import anchor_times
 
 __all__ = ["ActionSpace"]
 
@@ -20,7 +20,7 @@ class ActionSpace(nn.Module):
       from consecutive waypoints; ``to_poses`` integrates them back, so metrics and export
       always see poses.
 
-    Anchor times come from the training config (``build_idxs`` grid), identical to the datasets'.
+    Anchor times come from the training config (``anchor_times`` grid), identical to the datasets'.
     """
 
     def __init__(
@@ -30,6 +30,7 @@ class ActionSpace(nn.Module):
         plan_len_seconds: float = 3.0,
         plan_len_points: int = 10,
         offset_t_anchors: bool = False,
+        uniform_t_anchors: bool = False,
     ):
         super().__init__()
         if kind not in KINDS:
@@ -38,10 +39,7 @@ class ActionSpace(nn.Module):
             raise ValueError("pose_size must be 2 (x, y) or 3 (x, y, speed)")
         if plan_len_points < 2 or not math.isfinite(plan_len_seconds) or plan_len_seconds <= 0:
             raise ValueError("plan_len_points must be >= 2 and plan_len_seconds positive and finite")
-        if offset_t_anchors:
-            anchors = build_idxs(plan_len_seconds, plan_len_points + 1)[1:]
-        else:
-            anchors = build_idxs(plan_len_seconds, plan_len_points)
+        anchors = anchor_times(plan_len_seconds, plan_len_points, offset_t_anchors, uniform_t_anchors)
         self.kind = kind
         self.pose_size = pose_size
         self.num_pts = int(plan_len_points)

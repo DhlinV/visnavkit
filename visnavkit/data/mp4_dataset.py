@@ -18,7 +18,7 @@ from visnavkit.data.pose_targets import (
     sample_goal_frame,
     target_safe_frame_ranges,
 )
-from visnavkit.utils.common import build_idxs, load_npy
+from visnavkit.utils.common import anchor_times, load_npy
 from visnavkit.utils.orientation import yaw_from_quat
 
 GOAL_TYPES = ("none", "point", "gps", "image", "route_image", "instruction")
@@ -65,6 +65,7 @@ class Mp4WindowDataset(Dataset):
         plan_len_seconds=3,
         plan_len_points=10,
         offset_t_anchors=False,
+        uniform_t_anchors=False,
         use_full_pose=False,
         crop_xy=(0, 0),
         crop_wh=(1920, 1080),
@@ -113,10 +114,7 @@ class Mp4WindowDataset(Dataset):
         if plan_len_points < 2 or not np.isfinite(plan_len_seconds) or plan_len_seconds <= 0:
             raise ValueError("plan_len_points must be >= 2 and plan_len_seconds must be positive and finite")
 
-        if offset_t_anchors:
-            self.t_anchors = build_idxs(plan_len_seconds, plan_len_points + 1)[1:]
-        else:
-            self.t_anchors = build_idxs(plan_len_seconds, plan_len_points)
+        self.t_anchors = anchor_times(plan_len_seconds, plan_len_points, offset_t_anchors, uniform_t_anchors)
         self.num_pts = plan_len_points  # Legacy argument; the horizon is timestamp-based.
 
         s = downscale_factor

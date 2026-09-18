@@ -13,7 +13,7 @@ from torch import nn
 from torch.utils.flop_counter import FlopCounterMode
 
 from visnavkit.models.lit_model import disable_pretrained_downloads
-from visnavkit.utils.common import build_idxs
+from visnavkit.utils.common import anchor_times
 
 
 def sha256_file(path):
@@ -25,10 +25,13 @@ def sha256_file(path):
 
 
 def target_times(cfg):
-    count = int(cfg.plan_len_points)
-    if cfg.common.get("offset_t_anchors", False):
-        return build_idxs(float(cfg.plan_len_seconds), count + 1)[1:]
-    return build_idxs(float(cfg.plan_len_seconds), count)
+    common = cfg.common
+    return anchor_times(
+        float(cfg.plan_len_seconds),
+        int(cfg.plan_len_points),
+        common.get("offset_t_anchors", False),
+        common.get("uniform_t_anchors", False),
+    )
 
 
 def architecture_config(model_cfg):

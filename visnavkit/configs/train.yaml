@@ -50,6 +50,8 @@ common:
   plan_len_points: ${plan_len_points}
   # true: t_anchors = build_idxs(plan_len_seconds, plan_len_points + 1)[1:] (no t=0 anchor)
   offset_t_anchors: false
+  # true: plan_len_points anchors plan_len_seconds / plan_len_points s apart (a fixed rate), overriding offset_t_anchors
+  uniform_t_anchors: false
 
   # Goals are sampled from the episode's own future: a frame between goal_horizon_s[0] and
   # goal_horizon_s[1] seconds after the last observed frame (point / image goals).
