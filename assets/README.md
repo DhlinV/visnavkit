@@ -4,8 +4,16 @@ Small artifacts that travel with the repository.
 
 ## `datasets/`
 
-Tiny corpora — a handful of windows each — used to check that the policy runs on real data
-rather than on random tensors. Each subdirectory is one corpus in the standard clip layout:
+Tiny corpora — three face-blurred clips from each of 11 public datasets, 11 MB — used to check
+that the policy runs on real data rather than on random tensors. They are not checked in; fetch
+them from [UCLA-VAIL/visnavkit-examples](https://huggingface.co/datasets/UCLA-VAIL/visnavkit-examples),
+whose dataset card lists every source clip and its licence:
+
+```bash
+uv run hf download UCLA-VAIL/visnavkit-examples --repo-type dataset --local-dir assets/datasets
+```
+
+Each subdirectory is one corpus in the standard clip layout:
 
 ```text
 assets/datasets/<corpus>/<clip>/video.mp4
@@ -26,5 +34,5 @@ uv run visnavkit-dataset command=preprocess common.data_root=assets/datasets/<co
 uv run visnavkit-dataset command=visualize dataset=torch common.data_root=assets/datasets/<corpus>
 ```
 
-Keep these small — they are checked in. Anything beyond a few megabytes belongs outside the
-repository, behind `VISNAVKIT_DATA_ROOT`.
+`assets/datasets/` is gitignored; anything beyond a few megabytes belongs outside the repository,
+behind `VISNAVKIT_DATA_ROOT`.

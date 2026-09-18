@@ -13,6 +13,8 @@ wheels/
 /logs/
 /checkpoints/
 /results/
+# example corpora, fetched from Hugging Face (assets/README.md)
+/assets/datasets/
 outputs
 wandb
 *.log
