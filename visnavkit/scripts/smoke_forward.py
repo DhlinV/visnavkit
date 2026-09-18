@@ -36,7 +36,8 @@ def main(argv=None):
     inputs = " ".join(f"{name} {_shapes(value)}" for name, value in modalities.items())
     print(f"{cfg.exp_name}: vision {tuple(vision.shape)} goal {_shapes(goal)} {inputs}")
     print("plan:", {k: tuple(v.shape) for k, v in y.plan.items() if torch.is_tensor(v)})
-    print("tokens:", tuple(y.vision.tokens.shape), "speed:", _shapes(y.vision.speed))
+    if (vision := getattr(y, "vision", None)) is not None:
+        print("tokens:", tuple(vision.tokens.shape), "speed:", _shapes(vision.speed))
 
 
 if __name__ == "__main__":

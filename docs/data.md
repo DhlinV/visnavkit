@@ -47,7 +47,8 @@ slot, zeros otherwise — with `frame_mask`; `route_hw` adds `route_patch` + `ro
 `action_bounds` JSON {corpus dir: [[lo x 5], [hi x 5]]} add `embodiment_id` and `action_bounds` (the
 corpus is the clip's first directory under `data_root`). `common.uniform_t_anchors=true` puts the
 `plan_len_points` anchors on a fixed rate (`plan_len_seconds / plan_len_points` s apart) instead of the
-quadratic grid, in every dataset and the action space alike.
+quadratic grid, in every dataset and the action space alike. `model=flowpilot_sts` trains on these
+windows (`experiment=flowpilot_sts_tiny`).
 
 ## Public corpora
 

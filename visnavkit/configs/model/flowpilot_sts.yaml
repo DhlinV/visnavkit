@@ -1,0 +1,39 @@
+# FlowPilot-STS (visnavkit.models.flowpilot_sts): dataset=pose windows with frames at 20 Hz slots ->
+# [frame_t | frame_t-1] through a 6-channel FastViT-T12 on the slots that hold a frame (global + patch
+# features, speed head where the pair is whole), the frozen route VAE on the slots with a route, a causal
+# temporal fusion of [global | route], per-frame kv tokens [global, patches, route, goal, temporal,
+# embodiment] -> anchored flow DiT (k-means anchors of normalised dx, dy; adaLN on flow time + ego v, w;
+# per mode a velocity field, the direct dyaw / v / w state and a score). Inference: two modes, decoded from
+# noise 0 and from one N(0, I) draw. Needs pose_size 5 targets, `ego` starting with [speed, yaw_rate],
+# embodiment ids and action bounds (see configs/experiment/flowpilot_sts_tiny.yaml).
+_target_: visnavkit.models.flowpilot_sts.FlowPilotSTS
+backbone_name: fastvit_t12
+pretrained: true  # ImageNet weights; timm tiles the RGB stem onto the 6 channels
+p_drop_prev: 0.3  # training: drop the previous frame of a pair w.p. 0.3 (its speed target is masked with it)
+dim: 512
+seq_len: ${common.seq_length}
+num_embodiments: 14  # ids 0 .. 13; row 14 = unknown
+goal_mask_p: 0.5  # training: the goal token is the learned empty-goal token w.p. 0.5 per window
+speed_weight: 1.0  # speed head, on whole pairs only: corpora below the slot rate (5 fps = 1 slot in 4) never supervise it
+temporal:
+  num_layers: 2
+  num_heads: 8
+  dropout: 0.1
+  mask_p: 0.1  # training: random past-slot drop in the causal attention
+route:
+  weights: null  # the frozen route VAE checkpoint (RouteEncoder, 3 classes, 80 x 80); null = random (tests only)
+  num_classes: 3
+head:
+  anchors_path: null  # (K, plan_len_points, 2) normalised per-step dx, dy in [0, 1] (.npy or NPZ key `anchors`); null = random (tests only)
+  num_anchors: 64  # only for the random placeholder
+  num_pts: ${plan_len_points}
+  num_layers: 4
+  num_heads: 8
+  dropout: 0.1
+  wp_dim: 64  # sine features per waypoint of the mode-token encoder
+  ego_mask_p: 0.5  # training: hide each ego channel (v, w) w.p. 0.5
+  sample_steps: 4
+  start_step: 0.0  # inference starts at noise (1 - start_step) + anchor start_step
+  v_weight: 1.0
+  state_weight: 1.0
+  ce_weight: 1.0

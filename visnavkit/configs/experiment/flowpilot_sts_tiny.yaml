@@ -1,0 +1,65 @@
+# @package _global_
+# FlowPilot-STS tiny on the shared corpus in the clip layout: 1 s past at 20 Hz slots (frames + ego
+# state + route + goal) -> 4 s plans at 20 Hz (80 anchors). Corpus dirs under data_root name the
+# embodiments; clips1k's route_labels.npy sidecars come from the corpus conversion. action_bounds.json (per
+# corpus [[lo x 5], [hi x 5]] of the per-step dx, dy, dyaw, v, w) and the anchors come from
+#   uv run visnavkit-dataset command=action_anchors experiment=flowpilot_sts_tiny num_anchors=64 output_dir=<data_root>
+# Point the model at the real assets: model.route.weights=<route VAE ckpt> model.head.anchors_path=<kmeans64.npy>
+# Smoke: uv run python -m visnavkit.scripts.smoke_forward flowpilot_sts_tiny
+defaults:
+  - override /dataset: pose
+  - override /model: flowpilot_sts
+  - _self_
+
+exp_name: flowpilot_sts_tiny
+plan_len_seconds: 4
+plan_len_points: 80
+
+common:
+  seq_length: 20  # x hz 20 = the past second
+  uniform_t_anchors: true  # 80 anchors 0.05 s apart
+  crop_wh: [384, 216]  # the decoded frame size (dataset frame_wh; smoke_forward reads it too)
+  downscale_factor: 1
+  goal_horizon_s: [6.0, 10.0]
+  ego_features: [speed, yaw_rate]  # the DiT's ego conditioning reads [v, w]
+
+embodiments: # corpus dir -> id (the reference embodiments table; the coco family shares 0)
+  clips1k: 0
+  coco_250: 0
+  coco_50: 0
+  frodobot: 1
+  egowalk: 2
+  musohu: 3
+  navsim: 4
+  openscene: 5
+  nvidia: 6
+  scand_spot: 7
+  go_stanford: 8
+  creste: 9
+  coda: 10
+  gnd: 11
+  huron: 12
+  scand_jackal: 13
+
+dataset:
+  batch_size: 64
+  train_loader:
+    pose_size: 5
+    goal_type: point
+    frames: true
+    frame_wh: ${common.crop_wh}
+    route_hw: [80, 80]
+    embodiment_ids: ${embodiments}
+    action_bounds: action_bounds.json
+    no_flip: [nvidia, openscene, navsim]
+  val_loader:
+    pose_size: 5
+    goal_type: point
+    frames: true
+    frame_wh: ${common.crop_wh}
+    route_hw: [80, 80]
+    embodiment_ids: ${embodiments}
+    action_bounds: action_bounds.json
+
+metrics:
+  timesteps_to_compute: [1.0, 2.0, 4.0]

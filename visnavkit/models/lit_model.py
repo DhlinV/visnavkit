@@ -57,16 +57,18 @@ def build_targets(batch, action_reduction="none"):
 
 
 def disable_pretrained_downloads(model_cfg: DictConfig) -> DictConfig:
-    """Complete checkpoints carry every weight; skip backbone downloads and initialization files."""
-    goal_cfg = model_cfg.get("goal_encoder")
-    goal_cfgs = list(goal_cfg) if isinstance(goal_cfg, ListConfig) else [goal_cfg]
-    for component in [model_cfg.vision_encoder, *goal_cfgs]:
-        if component is None:
-            continue
-        if "pretrained" in component:
-            component.pretrained = False
-        if "weights" in component:
-            component.weights = None
+    """Complete checkpoints carry every weight; skip backbone downloads and initialization files, however nested."""
+    for key, value in model_cfg.items():
+        if key == "pretrained":
+            model_cfg[key] = False
+        elif key == "weights":
+            model_cfg[key] = None
+        elif isinstance(value, DictConfig):
+            disable_pretrained_downloads(value)
+        elif isinstance(value, ListConfig):
+            for item in value:
+                if isinstance(item, DictConfig):
+                    disable_pretrained_downloads(item)
     return model_cfg
 
 
@@ -201,6 +203,13 @@ class LitModel(L.LightningModule):
         y_hat, targets, loss_debug, x, effective_batch_size = self._step(batch, batch_idx, stage="val")
 
         planner_preds = self.model.action_decoder.parse_output(y_hat.plan.plans)
+        valid = getattr(y_hat.plan, "valid", None)  # rows the policy did not decide (e.g. slots without a frame)
+        if valid is not None:
+            planner_preds = {k: v[valid] for k, v in planner_preds.items()}
+            targets["action"] = {
+                k: v[valid] if torch.is_tensor(v) and v.ndim and v.shape[0] == len(valid) else v
+                for k, v in targets["action"].items()
+            }
         compute_and_log_metrics(
             self,
             planner_preds,

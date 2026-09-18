@@ -82,6 +82,7 @@ load no upstream checkpoint; `model=base` is the skeleton they inherit.
 | `internvla_n1` | DINOv2 ViT-S | causal x1 | instruction (System 2 latent, 4 tokens) | flow DiT (384, x12), 10 steps |
 | `mimic` | DINOv3 ViT-S | causal x4, 512-d | point + camera token | anchor, 64 anchors |
 | `flowpilot` | FastViT-MA36 + speed head | causal x4, 1280-d | gps, 90% goal dropout | anchored flow DiT (1280, x4), 64 anchors, 4 steps, Beta(1.5, 1) times |
+| `flowpilot_sts` | FastViT-T12 on [frame_t, frame_t-1] + speed head, frozen route VAE; `dataset=pose` 20 Hz slots | causal x2 over the slots, 512-d | point, 50% goal dropout, embodiment token | anchored flow DiT (512, x4, cross-attn only), 64 anchors, 4 steps, modes from noise 0 and one draw |
 
 ### Pretrained weights
 
