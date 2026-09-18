@@ -1,5 +1,6 @@
-# Corpus tooling: preprocess, cache, stats, anchors, plot, visualize. Shares train.yaml, so the
-# window definition, action space and goal type are exactly the ones training will use.
+# Corpus tooling: preprocess, cache, stats, anchors, plot, visualize, action_cache, action_anchors.
+# Shares train.yaml, so the window definition, action space and goal type are exactly the ones
+# training will use.
 defaults:
   - train
   - _self_
@@ -9,7 +10,8 @@ split: train
 output_dir: outputs/dataset
 name: actions  # output prefix; give each corpus its own so their statistics never mix
 samples: 4  # visualize
-num_anchors: 16  # anchors
+num_anchors: 16  # anchors, action_anchors
+per_corpus: 20000  # action_anchors: windows of each corpus the k-means sees (the bounds see them all)
 normalizer_mode: meanstd  # stats: meanstd | minmax
 val_fraction: 0.1  # preprocess
 manifest_dir: null  # preprocess: defaults to common.data_root

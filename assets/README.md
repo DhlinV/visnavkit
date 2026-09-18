@@ -13,7 +13,9 @@ whose dataset card lists every source clip and its licence:
 uv run hf download UCLA-VAIL/visnavkit-examples --repo-type dataset --local-dir assets/datasets
 ```
 
-Each subdirectory is one corpus in the standard clip layout:
+The download also brings `anchors/kmeans64.npy`, the `flowpilot_sts` trajectory vocabulary fitted on the
+full corpora (`model.head.anchors_path=assets/datasets/anchors/kmeans64.npy`; refit on your own data with
+`visnavkit-dataset command=action_anchors`). Every other subdirectory is one corpus in the standard clip layout:
 
 ```text
 assets/datasets/<corpus>/<clip>/video.mp4

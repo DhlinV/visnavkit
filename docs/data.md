@@ -6,6 +6,7 @@ uv run visnavkit-dataset command=visualize dataset=torch         # what the poli
 uv run visnavkit-dataset command=cache     dataset=torch         # window targets, no decode
 uv run visnavkit-dataset command=stats     dataset=torch name=city   # normalizer NPZ + plots
 uv run visnavkit-dataset command=anchors   dataset=torch num_anchors=64
+uv run visnavkit-dataset command=action_anchors dataset=pose num_anchors=64   # per-corpus bounds, k-means, figures
 ```
 
 `stats` and `anchors` read the cache and write the NPZs that
@@ -49,6 +50,15 @@ corpus is the clip's first directory under `data_root`). `common.uniform_t_ancho
 `plan_len_points` anchors on a fixed rate (`plan_len_seconds / plan_len_points` s apart) instead of the
 quadratic grid, in every dataset and the action space alike. `model=flowpilot_sts` trains on these
 windows (`experiment=flowpilot_sts_tiny`).
+
+`command=action_cache` writes every window's current-frame action [x, y, yaw, v, w] per corpus
+(`actions_<split>/<corpus>.npy`, no decode); `command=action_anchors` reads it (building it on demand)
+and writes `action_bounds.json` — per corpus the p0.5 / p99.5 range of the per-step [dx, dy, dyaw, v, w],
+symmetric in dy, dyaw and w so a flip stays a mirror — `kmeans<K>.npy` (K, T, 2), the k-means of the
+normalised dx, dy over at most `per_corpus` windows of each corpus plus their mirrors, and one
+`kmeans<K>_<corpus>.png` (the anchors in that corpus' metres, its windows' share of each, the channel
+histograms with the bounds). `output_dir=<data_root>` puts the bounds where the loaders' `action_bounds`
+looks; the anchors go to `model.head.anchors_path`.
 
 ## Public corpora
 

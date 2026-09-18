@@ -1,7 +1,9 @@
 """preprocess -> cache -> stats -> anchors -> visualize, on a synthetic two-clip corpus."""
 
+import json
 import shutil
 import subprocess
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -10,6 +12,9 @@ from hydra import compose, initialize_config_module
 
 pytest.importorskip("torchcodec")
 
+from visnavkit.data.pose_dataset import PoseWindowDataset
+from visnavkit.models.flowpilot_sts import AnchorFlowHead
+from visnavkit.scripts.dataset.actions import cache_actions, load_actions
 from visnavkit.scripts.dataset.anchors import fit_anchors, kmeans
 from visnavkit.scripts.dataset.cache import cache_targets, load_cache
 from visnavkit.scripts.dataset.cli import run
@@ -153,6 +158,54 @@ def test_kmeans_recovers_separated_clusters():
     assert sorted(round(float(c[0])) for c in centres) == [-3, 3]
     with pytest.raises(ValueError, match="at least 5 points"):
         kmeans(torch.randn(3, 2), 5)
+
+
+def test_action_bounds_and_anchors_are_fitted_per_corpus(tmp_path):
+    """action_anchors: one cache, one bounds row and one figure per corpus directory, one shared vocabulary."""
+    pytest.importorskip("matplotlib")
+    _clip(tmp_path / "fast", "clip", speed=2.0, curve=0.05)
+    _clip(tmp_path / "slow", "clip", speed=0.5)
+    preprocess(tmp_path, val_fraction=0.0, seed=0)
+    out = tmp_path / "out"
+    window = ["common.seq_length=4", "plan_len_seconds=1", "plan_len_points=4", "common.uniform_t_anchors=true"]
+    overrides = ["dataset=pose", "dataset.train_loader.stride_s=0.25", "dataset.num_workers=0", *window]
+    with initialize_config_module(version_base=None, config_module="visnavkit.configs"):
+        tools = [f"common.data_root={tmp_path}", f"output_dir={out}", "command=action_anchors", "num_anchors=4"]
+        cfg = compose(config_name="dataset_tools", overrides=[*overrides, *tools])
+
+    path = run(cfg)  # caches on demand
+    actions = load_actions(out)
+    assert sorted(actions) == ["fast", "slow"] and actions["fast"].shape[1:] == (4, 5)
+    assert actions["fast"][0, :, 0] == pytest.approx([0.5, 1.0, 1.5, 2.0], abs=1e-4)  # 2 m/s, anchors 0.25 s apart
+
+    bounds = {corpus: np.asarray(rows) for corpus, rows in json.loads((out / "action_bounds.json").read_text()).items()}
+    assert bounds["fast"][:, 0] == pytest.approx(0.5, abs=1e-4)  # 2 m/s x 0.25 s, every step
+    assert bounds["slow"][:, 0] == pytest.approx(0.125, abs=1e-4)
+    assert (bounds["fast"][1] > bounds["fast"][0]).all()  # a constant channel still has a range to divide by
+    assert bounds["fast"][0, [1, 2, 4]] == pytest.approx(-bounds["fast"][1, [1, 2, 4]])  # a flip stays a mirror
+    assert bounds["fast"][1, 1] > 10 * bounds["slow"][1, 1]  # only the fast corpus curves
+
+    anchors = np.load(path)
+    assert path.name == "kmeans4.npy" and anchors.shape == (4, 4, 2)
+    assert anchors.min() >= 0 and anchors.max() <= 1
+    assert (out / "kmeans4_fast.png").exists() and (out / "kmeans4_slow.png").exists()
+
+    # The two files are what the pose dataset and the FlowPilot-STS head read.
+    dataset = PoseWindowDataset(
+        "train.txt", tmp_path, seq_len=4, plan_len_seconds=1, plan_len_points=4, pose_size=5,
+        action_bounds=str(out / "action_bounds.json"),
+    )  # fmt: skip
+    rows = {Path(video).parent.parent.name: dataset[i]["action_bounds"] for i, (video, _) in enumerate(dataset.windows)}
+    assert rows["slow"].numpy() == pytest.approx(bounds["slow"])
+    head = AnchorFlowHead(dim=16, num_pts=4, anchors_path=path, num_layers=1, num_heads=2, wp_dim=4)
+    assert head.anchors.shape == (4, 4, 2)
+
+    (tmp_path / "fast").rename(tmp_path / "faster")  # a corpus that leaves the split leaves the cache
+    preprocess(tmp_path, val_fraction=0.0, seed=0)
+    cache_actions(cfg, "train", out)
+    assert sorted(load_actions(out)) == ["faster", "slow"]
+    with pytest.raises(ValueError, match="dataset=pose"):
+        cache_actions(_cfg(tmp_path), "train", out)
 
 
 def test_visualize_and_cli_describe_every_input(tmp_path, capsys):

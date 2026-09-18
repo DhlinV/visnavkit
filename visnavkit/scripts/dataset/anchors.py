@@ -16,15 +16,16 @@ def kmeans(points: torch.Tensor, num_clusters: int, iters: int = 100, seed: int 
     """Lloyd's algorithm from a k-means++ seeding; ``(N, D)`` points -> ``(K, D)`` centres."""
     if points.ndim != 2 or points.shape[0] < num_clusters:
         raise ValueError(f"Need at least {num_clusters} points of shape (N, D), got {tuple(points.shape)}")
-    generator = torch.Generator().manual_seed(seed)
-    centres = points[torch.randint(points.shape[0], (1,), generator=generator)]
+    device = points.device  # runs where the points live; a corpus-sized fit wants a GPU
+    generator = torch.Generator(device=device).manual_seed(seed)
+    centres = points[torch.randint(points.shape[0], (1,), generator=generator, device=device)]
     for _ in range(num_clusters - 1):  # k-means++: sample the next centre far from the current ones
         distance = torch.cdist(points, centres).amin(dim=1) ** 2
         total = distance.sum()
         index = (
             torch.multinomial(distance / total, 1, generator=generator)
             if total > 0
-            else torch.randint(points.shape[0], (1,), generator=generator)
+            else torch.randint(points.shape[0], (1,), generator=generator, device=device)
         )
         centres = torch.cat([centres, points[index]])
 

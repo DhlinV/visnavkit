@@ -5,21 +5,25 @@
     uv run visnavkit-dataset command=stats    dataset=torch         # normalizer NPZ + distribution plot
     uv run visnavkit-dataset command=anchors  dataset=torch         # k-means anchor vocabulary
     uv run visnavkit-dataset command=visualize dataset=torch        # what the policy is actually fed
+    uv run visnavkit-dataset command=action_cache   dataset=pose    # per-corpus window actions, no decode
+    uv run visnavkit-dataset command=action_anchors dataset=pose    # per-corpus bounds, k-means anchors, figures
 
-``stats``, ``anchors`` and ``plot`` reuse the cache and build it on demand. Every output is named
-after ``name``, which defaults to the dataset config, so several corpora keep separate statistics.
+``stats``, ``anchors``, ``plot`` and ``action_anchors`` reuse their cache and build it on demand.
+Every output is named after ``name``, which defaults to the dataset config, so several corpora keep
+separate statistics.
 """
 
 import hydra
 from omegaconf import DictConfig
 
+from visnavkit.scripts.dataset.actions import actions_dir, cache_actions, fit_action_anchors
 from visnavkit.scripts.dataset.anchors import fit_anchors
 from visnavkit.scripts.dataset.cache import cache_path, cache_targets, load_cache
 from visnavkit.scripts.dataset.preprocess import preprocess
 from visnavkit.scripts.dataset.stats import fit_stats, plot_distributions
 from visnavkit.scripts.dataset.visualize import visualize
 
-COMMANDS = ("preprocess", "cache", "stats", "anchors", "plot", "visualize")
+COMMANDS = ("preprocess", "cache", "stats", "anchors", "plot", "visualize", "action_cache", "action_anchors")
 
 
 def _cache(cfg):
@@ -38,6 +42,12 @@ def run(cfg: DictConfig):
         return cache_targets(cfg, cfg.split, cfg.output_dir)
     if command == "visualize":
         return visualize(cfg, cfg.split, cfg.samples, cfg.output_dir)
+    if command == "action_cache":
+        return cache_actions(cfg, cfg.split, cfg.output_dir)
+    if command == "action_anchors":
+        if not any(actions_dir(cfg.output_dir, cfg.split).glob("*.npy")):
+            cache_actions(cfg, cfg.split, cfg.output_dir)
+        return fit_action_anchors(cfg.output_dir, cfg.split, cfg.num_anchors, cfg.per_corpus, cfg.seed)
     cache = _cache(cfg)
     if command == "anchors":
         return fit_anchors(cache, cfg.num_anchors, cfg.output_dir, cfg.seed)
