@@ -2,8 +2,8 @@
 # [frame_t | frame_t-1] through a 6-channel FastViT-T12 on the slots that hold a frame (global + patch
 # features, speed head where the pair is whole), the frozen route VAE on the slots with a route, a causal
 # temporal fusion of [global | route], per-frame kv tokens [global, patches, route, goal, temporal,
-# embodiment] -> anchored flow DiT (k-means anchors of normalised dx, dy; adaLN on flow time + ego v, w;
-# per mode a velocity field, the direct dyaw / v / w state and a score). Inference: two modes, decoded from
+# embodiment] -> anchored flow DiT (k-means anchors of normalised dx, dy; adaLN on flow time; ego v, w
+# embedded into the mode tokens; per mode a velocity field, the direct dyaw / v / w state and a score). Inference: two modes, decoded from
 # noise 0 and from one N(0, I) draw. Needs pose_size 5 targets, `ego` starting with [speed, yaw_rate],
 # embodiment ids and action bounds (see configs/experiment/flowpilot_dst_tiny.yaml).
 _target_: visnavkit.models.flowpilot_dst.FlowPilotDST

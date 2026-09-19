@@ -1,0 +1,64 @@
+Installed 10 packages in 55ms
+Traceback (most recent call last):
+  File "/home/honglin/visnavkit/.venv/bin/visnavkit-train", line 4, in <module>
+    from visnavkit.scripts.train import main
+  File "/home/honglin/visnavkit/visnavkit/scripts/train.py", line 7, in <module>
+    import lightning as L
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/lightning/__init__.py", line 18, in <module>
+    from lightning.fabric.fabric import Fabric  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/lightning/fabric/__init__.py", line 35, in <module>
+    from lightning.fabric.fabric import Fabric  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/lightning/fabric/fabric.py", line 39, in <module>
+    from lightning.fabric.accelerators.accelerator import Accelerator
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/lightning/fabric/accelerators/__init__.py", line 15, in <module>
+    from lightning.fabric.accelerators.accelerator import Accelerator
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/lightning/fabric/accelerators/accelerator.py", line 19, in <module>
+    from lightning.fabric.accelerators.registry import _AcceleratorRegistry
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/lightning/fabric/accelerators/registry.py", line 18, in <module>
+    from lightning.fabric.utilities.exceptions import MisconfigurationException
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/lightning/fabric/utilities/__init__.py", line 16, in <module>
+    from lightning.fabric.utilities.apply_func import move_data_to_device
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/lightning/fabric/utilities/apply_func.py", line 24, in <module>
+    from lightning.fabric.utilities.imports import _NUMPY_AVAILABLE
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/lightning/fabric/utilities/imports.py", line 41, in <module>
+    _TORCHMETRICS_GREATER_EQUAL_1_0_0 = compare_version("torchmetrics", operator.ge, "1.0.0")
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/lightning_utilities/core/imports.py", line 78, in compare_version
+    pkg = importlib.import_module(package)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/honglin/.local/share/uv/python/cpython-3.12.14-linux-x86_64-gnu/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/torchmetrics/__init__.py", line 37, in <module>
+    from torchmetrics import functional  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/torchmetrics/functional/__init__.py", line 14, in <module>
+    from torchmetrics.functional.audio._deprecated import _permutation_invariant_training as permutation_invariant_training
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/torchmetrics/functional/audio/__init__.py", line 14, in <module>
+    from torchmetrics.functional.audio.pit import permutation_invariant_training, pit_permutate
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/torchmetrics/functional/audio/pit.py", line 22, in <module>
+    from torchmetrics.utilities import rank_zero_warn
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/torchmetrics/utilities/__init__.py", line 14, in <module>
+    from torchmetrics.utilities.checks import check_forward_full_state_property
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/torchmetrics/utilities/checks.py", line 26, in <module>
+    from torchmetrics.metric import Metric
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/torchmetrics/metric.py", line 43, in <module>
+    from torchmetrics.utilities.plot import _AX_TYPE, _PLOT_OUT_TYPE, plot_single_or_multi_val
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/torchmetrics/utilities/plot.py", line 26, in <module>
+    import matplotlib
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/matplotlib/__init__.py", line 161, in <module>
+    from . import _api, _version, cbook, rcsetup
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/matplotlib/rcsetup.py", line 34, in <module>
+    from matplotlib.colors import Colormap, is_color_like
+  File "/home/honglin/visnavkit/.venv/lib/python3.12/site-packages/matplotlib/colors.py", line 58, in <module>
+    from matplotlib import _api, _cm, cbook, scale
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 995, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 1128, in get_code
+  File "<frozen importlib._bootstrap_external>", line 759, in _compile_bytecode
+  File "<frozen importlib._bootstrap>", line 491, in _verbose_message
+KeyboardInterrupt

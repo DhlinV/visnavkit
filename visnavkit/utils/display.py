@@ -10,7 +10,8 @@
 - ``lightning``: Lightning's depth-1 table (name, type, params, mode), the reference's.
 - ``deep``: the same table ``summary_depth`` levels deep.
 - ``rich``: the rich table ``summary_depth`` levels deep (the ``rich`` extra).
-- ``stages``: one row per policy stage: total / trainable / frozen parameters, share of the model, fp32 size.
+- ``stages``: one row per policy stage: total / trainable / frozen parameters (``36,614,802 (36.61M)``), share of
+  the model, fp32 size.
 - ``none``: nothing.
 """
 
@@ -28,6 +29,11 @@ MODEL_SUMMARIES = ("lightning", "deep", "rich", "stages", "none")
 
 def _format_metrics(metrics):
     return " | ".join(f"{k} {v:.4g}" if isinstance(v, float) else f"{k} {v}" for k, v in metrics.items())
+
+
+def count(n):
+    """``36614802`` -> ``36,614,802 (36.61M)``; ``B`` from a billion."""
+    return f"{n:,} ({n / 1e9:.2f}B)" if n >= 1e9 else f"{n:,} ({n / 1e6:.2f}M)"
 
 
 class LineProgressBar(ProgressBar):
@@ -88,16 +94,16 @@ class StageSummary(Callback):
             total = sum(p.numel() for p in loose)
             rows.append(("(own)", type(model).__name__, total, sum(p.numel() for p in loose if p.requires_grad), 0))
         grand = sum(r[2] for r in rows) or 1
-        header = f"{'stage':<20} {'type':<22} {'params':>12} {'trainable':>12} {'frozen':>12} {'share':>7} {'fp32':>9}"
+        header = f"{'stage':<20} {'type':<22} {'params':>22} {'trainable':>22} {'frozen':>22} {'share':>7} {'fp32':>9}"
         lines = [header, "-" * len(header)]
         for name, kind, total, trainable, frozen in rows:
             lines.append(
-                f"{name:<20} {kind:<22} {total:>12,} {trainable:>12,} {frozen:>12,} "
+                f"{name:<20} {kind:<22} {count(total):>22} {count(trainable):>22} {count(frozen):>22} "
                 f"{100 * total / grand:>6.1f}% {total * 4 / 2**20:>7.1f}MB"
             )
         trainable = sum(r[3] for r in rows)
-        lines += ["-" * len(header), f"{'total':<43} {grand:>12,} {trainable:>12,} {grand - trainable:>12,} "
-                  f"{100.0:>6.1f}% {grand * 4 / 2**20:>7.1f}MB"]  # fmt: skip
+        lines += ["-" * len(header), f"{'total':<43} {count(grand):>22} {count(trainable):>22} "
+                  f"{count(grand - trainable):>22} {100.0:>6.1f}% {grand * 4 / 2**20:>7.1f}MB"]  # fmt: skip
         print("\n".join(lines), flush=True)
 
 

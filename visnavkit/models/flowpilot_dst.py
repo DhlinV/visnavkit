@@ -18,9 +18,9 @@ Trains on ``dataset=pose`` windows with frames: ``vision`` (B, T, 3, H, W) in [0
    [distance / 100, cos, sin]; w.p. ``goal_mask_p`` per window in training, and whenever no goal is given,
    it is the learned empty-goal token.
 5. ``AnchorFlowHead`` (the reference AnchorFlowPlanner): K anchors of normalised per-step dx, dy; queries
-   x_t^k = (1 - t) eps + t anchor_k -> mode tokens; ``num_layers`` x [adaLN(t, ego) cross-attention to the
-   kv tokens -> FF], no self-attention between modes; per mode a velocity field (T, 2), the direct state
-   (T, 3) [dyaw, v, w] and a score. Loss on the anchor nearest the GT (metric ADE): MSE(velocity,
+   x_t^k = (1 - t) eps + t anchor_k -> mode tokens (+ the anchor's embedding + the ego [v, w] embedding);
+   ``num_layers`` x [adaLN(t) cross-attention to the kv tokens -> FF], no self-attention between modes;
+   per mode a velocity field (T, 2), the direct state (T, 3) [dyaw, v, w] and a score. Loss on the anchor nearest the GT (metric ADE): MSE(velocity,
    x1_dxdy - eps) + MSE(state, x1_dyaw_v_w) + CE(score, winner). Inference: ``sample_steps`` Euler steps
    from noise 0 and from one N(0, I) draw, the top-score mode of each = 2 modes of metric [x, y, yaw, v, w]
    in the flat plan layout, so the open-loop metrics read them unchanged.
@@ -391,9 +391,10 @@ class AnchorFlowHead(nn.Module):
         tau = timestep_embedding(t, a.shape[-1]).to(a.dtype)[:, None].expand_as(a)
         return self.w3(F.silu(self.w2(torch.cat([a, tau], -1)))) + self.mode_emb
 
-    def denoise(self, x, t, cond, kv):
-        """-> velocity ``(N, K, T, 2)``, state ``(N, K, T, 3)`` [dyaw, v, w], score ``(N, K)``."""
-        h = self.mode_tokens(x, t)
+    def denoise(self, x, t, cond, kv, ego):
+        """adaLN on ``cond`` (flow time), the ego embedding ``(N, D)`` added to every mode token -> velocity
+        ``(N, K, T, 2)``, state ``(N, K, T, 3)`` [dyaw, v, w], score ``(N, K)``."""
+        h = self.mode_tokens(x, t) + ego[:, None]
         for block in self.blocks:
             h = block(h, kv, cond)
         shift, scale = self.ada_out(cond)[:, None].chunk(2, -1)
@@ -418,8 +419,8 @@ class AnchorFlowHead(nn.Module):
         noise = torch.randn_like(anchors)
         t = self.sample_time(n, kv.device)
         x_t = (1 - t)[:, None, None, None] * noise + t[:, None, None, None] * anchors
-        cond = self.time_embed(t).to(kv.dtype) + self.ego(self.ego_cond(ego_vw, bounds)).to(kv.dtype)
-        velocity, state, score = self.denoise(x_t, t, cond, kv)
+        ego = self.ego(self.ego_cond(ego_vw, bounds)).to(kv.dtype)
+        velocity, state, score = self.denoise(x_t, t, self.time_embed(t).to(kv.dtype), kv, ego)
         lo, hi = bounds[:, None, None, 0, :2], bounds[:, None, None, 1, :2]
         paths = ((anchors + 1) / 2 * (hi - lo) + lo).cumsum(2)  # (N, K, T, 2) metric
         winner = (paths - actions[:, None, :, :2]).norm(dim=-1).mean(-1).argmin(1)  # the anchor nearest the GT
@@ -445,7 +446,7 @@ class AnchorFlowHead(nn.Module):
         ego = self.ego(self.ego_cond(ego_vw, bounds)).to(kv.dtype)
         for i in range(steps):  # Euler on the predicted velocity
             t = torch.full((n,), s0 + i * dt, device=kv.device)
-            velocity, state, score = self.denoise(x, t, self.time_embed(t).to(kv.dtype) + ego, kv)
+            velocity, state, score = self.denoise(x, t, self.time_embed(t).to(kv.dtype), kv, ego)
             x = x + dt * velocity.float()
         return torch.cat([x.clamp(-3.0, 3.0), state.float()], -1), score.float()
 
