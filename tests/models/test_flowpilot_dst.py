@@ -1,13 +1,16 @@
-"""FlowPilot-STS: masked pair encoding, per-frame kv tokens, the anchored flow head and its two-mode output."""
+"""FlowPilot-DST: masked pair encoding, per-frame kv tokens, the anchored flow head and its two-mode output."""
+
+from types import SimpleNamespace
 
 import torch
 from hydra import compose, initialize_config_module
 from hydra.utils import instantiate
+from torchvision.io import decode_png, read_file
 
-from visnavkit.models.lit_model import build_targets, disable_pretrained_downloads
+from visnavkit.models.lit_model import ROUTE_COLORS, LitModel, build_targets, disable_pretrained_downloads, route_image
 
 SMALL = [
-    "model=flowpilot_sts",
+    "model=flowpilot_dst",
     "model.pretrained=false",
     "model.backbone_name=fastvit_t8",
     "model.dim=32",
@@ -138,3 +141,23 @@ def test_example_batch_runs_the_smoke_path():
     with torch.no_grad():
         out = model(vision, goal, **mods)
     assert out.plan.plans.shape == (8, model.action_decoder.flat_size)
+
+
+def test_route_image_is_recorded_for_the_first_window_with_a_route(tmp_path):
+    batch = make_batch()
+    batch["route_mask"] = torch.tensor([[False] * 4, [True] * 4])  # only window 1 has a route
+    image = route_image(batch)
+    assert image.shape == (3, 32, 64 + 32) and image.dtype == torch.uint8
+    frame = (batch["vision"][1, -1] * 255).round().to(torch.uint8)
+    assert torch.equal(image[..., :64], frame)
+    patch = ROUTE_COLORS[batch["route_patch"][1, -1].long()].permute(2, 0, 1)  # 80 x 80 -> 32 x 32, nearest
+    assert torch.equal(image[..., 64:], patch[:, (torch.arange(32) * 2.5).long()][..., (torch.arange(32) * 2.5).long()])
+    assert route_image({**batch, "route_mask": torch.zeros(2, 4, dtype=torch.bool)}) is None
+
+    logged = []
+    wandb_like = SimpleNamespace(log_image=lambda **kwargs: logged.append(kwargs))
+    lit = SimpleNamespace(trainer=SimpleNamespace(log_dir=str(tmp_path)), global_step=7, loggers=[wandb_like])
+    LitModel.on_fit_start(lit)
+    LitModel.record_route(lit, batch, "val")
+    assert torch.equal(decode_png(read_file(str(tmp_path / "images" / "val_route_step0000007.png"))), image)
+    assert logged[0]["key"] == "val/route" and logged[0]["step"] == 7 and logged[0]["images"][0].shape == (32, 96, 3)

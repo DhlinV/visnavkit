@@ -1,12 +1,16 @@
 import copy
 import time
 import warnings
+from pathlib import Path
 
 import lightning as L
 import torch
+import torch.nn.functional as F
 from hydra.utils import instantiate
 from omegaconf import DictConfig, ListConfig
+from torchvision.io import write_png
 
+from visnavkit.data.frame_augs import FrameAugment
 from visnavkit.evaluation.calculators.base_calculator import MetricsCalculatorBase
 from visnavkit.utils.logger import get_logger
 
@@ -54,6 +58,25 @@ def build_targets(batch, action_reduction="none"):
             else times.repeat_interleave(future_poses.shape[1], dim=0)
         )
     return targets
+
+
+ROUTE_COLORS = torch.tensor(  # route class id -> RGB: background, sidewalk, crosswalk, then spares
+    [[0, 0, 0], [0, 0, 255], [0, 255, 0], [255, 0, 0], [128, 128, 128], [255, 255, 0]], dtype=torch.uint8
+)
+
+
+def route_image(batch):
+    """The batch's first window with a current route patch: [current frame | route patch in colour], (3, H, W + H) uint8."""
+    if "route_patch" not in batch or "route_mask" not in batch or not batch["route_mask"][:, -1].any():
+        return None
+    i = int(batch["route_mask"][:, -1].nonzero()[0])
+    frame = batch["vision"][i, -1].cpu()
+    if frame.dtype != torch.uint8:
+        frame = (frame.float() * 255).round().clamp(0, 255).to(torch.uint8)
+    ids = batch["route_patch"][i, -1].cpu().long().clamp(0, len(ROUTE_COLORS) - 1)
+    patch = ROUTE_COLORS[ids].permute(2, 0, 1)[None].float()
+    patch = F.interpolate(patch, size=(frame.shape[-2],) * 2, mode="nearest")[0].to(torch.uint8)
+    return torch.cat([frame, patch], -1)
 
 
 def disable_pretrained_downloads(model_cfg: DictConfig) -> DictConfig:
@@ -136,6 +159,7 @@ class LitModel(L.LightningModule):
         validation_metrics_cfg = cfg.metrics.get("validation_metrics") or {}
         planner_calculators_cfg = validation_metrics_cfg.get("planner_calculators") or []
         self.planner_calculators = [instantiate(c) for c in planner_calculators_cfg]
+        self.augment = FrameAugment(**augs) if (augs := cfg.get("augs")) else None
 
     @classmethod
     def load_from_checkpoint(cls, checkpoint_path, *args, **kwargs):
@@ -148,6 +172,9 @@ class LitModel(L.LightningModule):
     def _step(self, batch, batch_idx, stage: str):
         start_time = time.time()
         x = batch["vision"]
+        if stage == "train" and self.augment is not None and x.dtype == torch.uint8:
+            x = self.augment.batch(x.to(self.device, non_blocking=True), batch.get("frame_mask"))
+            batch["vision"] = x  # the recorded route image shows what the policy saw
         if x.dtype == torch.uint8:
             x = x.float().div(255.0)
         x = x.to(self.device, non_blocking=True)
@@ -193,8 +220,27 @@ class LitModel(L.LightningModule):
         elapsed = time.time() - start_time
         rps = torch.tensor(x.shape[0] / elapsed, device=self.device, dtype=torch.float32)
         self.log(f"{stage}/rps", rps, prog_bar=True, sync_dist=True, reduce_fx="sum")
+        every = (self.cfg.trainer.logging.get("log_images_every_n_batches") or {}).get(stage)
+        if every and batch_idx % every == 0 and self.trainer.is_global_zero:
+            self.record_route(batch, stage)
 
         return y_hat, targets, loss_debug, x, effective_batch_size
+
+    def on_fit_start(self):
+        self.images_dir = Path(self.trainer.log_dir or ".") / "images"  # on every rank: log_dir is a broadcast
+
+    def record_route(self, batch, stage):
+        """The route image to <log_dir>/images/<stage>_route_step<N>.png and to every logger that takes images."""
+        image = route_image(batch)
+        if image is None:
+            return
+        path = self.images_dir / f"{stage}_route_step{self.global_step:07d}.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_png(image, str(path))
+        for experiment_logger in self.loggers:
+            if hasattr(experiment_logger, "log_image"):  # e.g. WandbLogger
+                image_hwc = image.permute(1, 2, 0).numpy()
+                experiment_logger.log_image(key=f"{stage}/route", images=[image_hwc], step=self.global_step)
 
     def training_step(self, batch, batch_idx):
         self._step(batch, batch_idx, stage="train")

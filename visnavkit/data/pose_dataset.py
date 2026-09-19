@@ -23,7 +23,7 @@ from visnavkit.utils.orientation import yaw_from_quat
 GOAL_TYPES = ("none", "point", "gps")
 EGO_FEATURES = {"past_xy": 2, "yaw": 1, "speed": 1, "yaw_rate": 1}  # name -> channels
 POSE_SIZES = {2: "x, y", 3: "x, y, v", 5: "x, y, yaw, v, w"}
-ROUTE_LABELS = "route_labels.npy"
+ROUTE_LABELS = "route_labels"  # .npy (memory-mapped) or .npz (compressed, key `labels`): (N, h, w) uint8 class ids
 
 
 def _wrap(angle):
@@ -40,6 +40,16 @@ def corpus_of(video_fp, data_root):
     """A clip's corpus: the first directory of its path under ``data_root``, None outside of one."""
     parts = Path(os.path.relpath(Path(video_fp).parent, data_root)).parts
     return parts[0] if parts and parts[0] != ".." else None
+
+
+def load_route_labels(clip):
+    """A clip's route class ids ``(N, h, w)``: ``route_labels.npy`` or the compressed ``route_labels.npz``; None without."""
+    if (clip / f"{ROUTE_LABELS}.npy").exists():
+        return np.load(clip / f"{ROUTE_LABELS}.npy", mmap_mode="r")
+    if (clip / f"{ROUTE_LABELS}.npz").exists():
+        with np.load(clip / f"{ROUTE_LABELS}.npz") as archive:
+            return archive["labels"]
+    return None
 
 
 def slot_frames(times, slot_times, hz):
@@ -69,7 +79,8 @@ class PoseWindowDataset(Dataset):
       that lies within half a slot (all slots at 20 fps, 1 in 4 at 5 fps), zeros otherwise, and
       ``frame_mask`` (S,) True where the slot holds a frame; ``frame_wh`` resizes the decoded frames.
     - ``route_hw``: ``route_patch`` (S, h, w) float class ids from the clip's ``route_labels.npy``
-      (N, h, w) uint8 sidecar at the slot's frame, and ``route_mask`` (S,) True where it is real
+      (N, h, w) uint8 sidecar (or ``route_labels.npz``, key ``labels``: the compressed form a large corpus
+      needs) at the slot's frame, and ``route_mask`` (S,) True where it is real
       (zeros + False without the sidecar or the frame).
     - ``embodiment_ids`` {corpus: id}: ``embodiment_id`` of the clip's corpus, the first directory of
       the clip path under ``data_root``; ``action_bounds`` JSON {corpus: [[lo x 5], [hi x 5]]} gives
@@ -211,8 +222,7 @@ class PoseWindowDataset(Dataset):
             vision = self._decode(video_fp, frame_idxs, mask)
         if self.route_hw is not None:
             route, route_mask = np.zeros((self.seq_len, *self.route_hw), np.float32), np.zeros(self.seq_len, bool)
-            if (clip / ROUTE_LABELS).exists():
-                labels = np.load(clip / ROUTE_LABELS, mmap_mode="r")
+            if (labels := load_route_labels(clip)) is not None:
                 if labels.shape[1:] != self.route_hw:
                     raise ValueError(f"{clip / ROUTE_LABELS} must be (N, {self.route_hw[0]}, {self.route_hw[1]})")
                 route[mask], route_mask = labels[frame_idxs[mask]], mask.copy()

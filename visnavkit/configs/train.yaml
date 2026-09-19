@@ -23,6 +23,11 @@ pretrained:
   ckpt_path: null
   strict: true
 
+# Photometric augmentation of train batches on the GPU (visnavkit.data.frame_augs.FrameAugment kwargs):
+# color_jitter [brightness, contrast, saturation, hue] plus p_erase / p_frame_brightness / p_grayscale /
+# p_blur / p_noise / p_jpeg camera degradations; pixels only, so no target changes. null = off.
+augs: null
+
 trainer:
   kwargs:
     max_epochs: 50
@@ -33,6 +38,9 @@ trainer:
     log_every_n_steps: 1
   logging:
     save_top_k_ckpts: 5
+    # batches between route images ([current frame | route patch], windows with a route only) written to
+    # <log_dir>/images/ and to image-capable loggers (wandb); null = off
+    log_images_every_n_batches: { train: null, val: null }
     monitor: val/action_reg
     mode: min
   resume:

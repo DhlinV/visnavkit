@@ -1,4 +1,4 @@
-"""FlowPilot-STS: frame pairs, route and goal per 20 Hz slot -> per-frame kv tokens -> anchored flow DiT.
+"""FlowPilot-DST (decoupled spatial-temporal): frame pairs, route and goal per 20 Hz slot -> per-frame kv tokens -> anchored flow DiT.
 
 Trains on ``dataset=pose`` windows with frames: ``vision`` (B, T, 3, H, W) in [0, 1] + ``frame_mask`` (B, T)
 (a slot without a source frame is zeros and False), ``route_patch`` (B, T, h, w) class ids + ``route_mask``,
@@ -75,10 +75,32 @@ class PairEncoder(nn.Module):
         )
         self.dim = self.backbone.feature_info.channels()[-1]
         self.stride = self.backbone.feature_info.reduction()[-1]
+        if pretrained:
+            self.check_pretrained(backbone_name)
         self.speed_head = SpeedHead(self.dim)
         self.p_drop_prev = p_drop_prev
         self.register_buffer("mean", torch.tensor(IMAGENET_MEAN).view(1, 3, 1, 1), persistent=False)
         self.register_buffer("std", torch.tensor(IMAGENET_STD).view(1, 3, 1, 1), persistent=False)
+
+    def check_pretrained(self, backbone_name):
+        """Log the load against timm's RGB checkpoint: its first convs tiled to 6 channels x 1/2, every other tensor identical."""
+        rgb = timm.create_model(backbone_name, pretrained=True, features_only=True, out_indices=(-1,)).state_dict()
+        own, tiled, same = self.backbone.state_dict(), [], []
+        for key, value in rgb.items():
+            if own[key].shape == value.shape:
+                same += [key] if torch.equal(own[key], value) else []
+            elif value.ndim == 4 and value.shape[1] == 3:
+                c = own[key].shape[1]
+                tiled += [key] if torch.allclose(own[key], value.repeat(1, -(-c // 3), 1, 1)[:, :c] * (3 / c)) else []
+        report = (
+            f"PairEncoder: {backbone_name} ImageNet weights ({self.backbone.pretrained_cfg.get('hf_hub_id')}): "
+            f"{len(same)} / {len(rgb)} tensors identical to the RGB checkpoint, {len(tiled)} first convs {tiled} "
+            f"tiled to {own[tiled[0]].shape[1] if tiled else '?'} channels; features {self.dim}-d at stride {self.stride}"
+        )
+        if len(same) + len(tiled) != len(rgb):
+            logger.warning(f"{report}; {sorted(set(rgb) - set(same) - set(tiled))} differ: NOT the pretrained weights")
+        else:
+            logger.info(report)
 
     def forward(self, frames, frame_mask):
         """``(B, T, 3, H, W)`` in [0, 1], ``(B, T)`` -> global (B, T, C), patches (B, T, C, gh, gw), speed (B, T, 1), pair_mask (B, T)."""
@@ -152,11 +174,16 @@ class RouteEncoder(nn.Module):
         if weights is None:
             logger.warning("RouteEncoder: no weights, the frozen route encoder is random (tests only)")
         else:
-            state = torch.load(weights, map_location="cpu", weights_only=False)
-            state = state.get("state_dict", state)
+            ckpt = torch.load(weights, map_location="cpu", weights_only=False)
+            state = ckpt.get("state_dict", ckpt)
             prefix = "model.encoder."
             own = {k.removeprefix(prefix): v for k, v in state.items() if k.startswith(prefix) and "fc_logvar" not in k}
-            self.load_state_dict(own)
+            self.load_state_dict(own)  # strict: every parameter and BatchNorm statistic comes from the checkpoint
+            logger.info(
+                f"RouteEncoder: {len(own)} / {len(self.state_dict())} tensors (all, strict) from {weights} "
+                f"(epoch {ckpt.get('epoch')}, step {ckpt.get('global_step')}); {len(state) - len(own)} unused "
+                f"(fc_logvar, decoder); frozen, posterior mean of {self.num_classes}-class {self.hw[0]} x {self.hw[1]} patches"
+            )
         self.requires_grad_(False)
         self.eval()
 
@@ -434,7 +461,7 @@ class AnchorFlowHead(nn.Module):
 
 
 @dataclass
-class STSPlan(PlanOutput):
+class DSTPlan(PlanOutput):
     """``plans`` for every frame of the batch (zeros where no frame); the rest describe the decoded rows."""
 
     valid: torch.Tensor | None = None  # (B T,) frames with a frame: the only rows decoded and supervised
@@ -444,13 +471,13 @@ class STSPlan(PlanOutput):
 
 
 @dataclass
-class STSOutput(BaseOutput):
-    plan: STSPlan
+class DSTOutput(BaseOutput):
+    plan: DSTPlan
     speed: torch.Tensor  # (B T, 1)
     pair_mask: torch.Tensor  # (B T,) frames whose pair is whole: the speed head's supervision
 
 
-class FlowPilotSTS(nn.Module):
+class FlowPilotDST(nn.Module):
     """The policy; ``forward`` takes the batch keys by name (``modality_input_names`` beyond ``vision`` and ``goal``)."""
 
     modality_input_names = ["frame_mask", "route_patch", "route_mask", "ego", "embodiment_id", "action_bounds"]
@@ -492,11 +519,11 @@ class FlowPilotSTS(nn.Module):
         ego=None,
         embodiment_id=None,
         action_bounds=None,
-    ) -> STSOutput:
+    ) -> DSTOutput:
         b, t = vision.shape[:2]
         device = vision.device
         if ego is None or action_bounds is None:
-            raise ValueError("FlowPilotSTS needs `ego` (B, T, >= 2) [v, w, ...] and `action_bounds` (B, 2, 5)")
+            raise ValueError("FlowPilotDST needs `ego` (B, T, >= 2) [v, w, ...] and `action_bounds` (B, 2, 5)")
         if frame_mask is None:
             frame_mask = torch.ones(b, t, dtype=torch.bool, device=device)
         if route_mask is None:
@@ -536,10 +563,10 @@ class FlowPilotSTS(nn.Module):
         logits = None
         if not self.training and len(idx):
             plans[idx], _, logits = self.action_decoder.plans(kv, bounds, ego_vw)
-        plan = STSPlan(
+        plan = DSTPlan(
             plans=plans, logits=logits, tokens=kv, valid=frame_mask.reshape(-1), idx=idx, ego_vw=ego_vw, bounds=bounds
         )
-        return STSOutput(plan=plan, speed=speed.reshape(b * t, 1), pair_mask=pair_mask.reshape(-1))
+        return DSTOutput(plan=plan, speed=speed.reshape(b * t, 1), pair_mask=pair_mask.reshape(-1))
 
     def example_batch(self, batch_size, frames, image_hw, device=None):
         """Synthetic ``(vision, goal, {modality key: value})`` inputs for shape checks; every slot holds a frame."""
@@ -557,11 +584,11 @@ class FlowPilotSTS(nn.Module):
         )
         return vision, goal, modalities
 
-    def get_losses(self, preds: STSOutput, targets):
+    def get_losses(self, preds: DSTOutput, targets):
         plan = preds.plan
         actions = targets["action"]["future_poses"][plan.idx].float()  # (N, T, 5) per frame with a frame
         if actions.shape[-1] != 5:
-            raise ValueError("FlowPilotSTS needs pose_size 5 targets [x, y, yaw, v, w]")
+            raise ValueError("FlowPilotDST needs pose_size 5 targets [x, y, yaw, v, w]")
         head = self.action_decoder.loss(plan.tokens, actions, plan.bounds, plan.ego_vw)
         m = preds.pair_mask
         speed_gt = targets["vision"]["frame_speeds"].reshape(-1, 1).float()

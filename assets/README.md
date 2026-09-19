@@ -13,7 +13,7 @@ whose dataset card lists every source clip and its licence:
 uv run hf download UCLA-VAIL/visnavkit-examples --repo-type dataset --local-dir assets/datasets
 ```
 
-The download also brings `anchors/kmeans64.npy`, the `flowpilot_sts` trajectory vocabulary fitted on the
+The download also brings `anchors/kmeans64.npy`, the `flowpilot_dst` trajectory vocabulary fitted on the
 full corpora (`model.head.anchors_path=assets/datasets/anchors/kmeans64.npy`; refit on your own data with
 `visnavkit-dataset command=action_anchors`). Every other subdirectory is one corpus in the standard clip layout:
 

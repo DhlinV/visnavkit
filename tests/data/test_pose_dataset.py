@@ -129,9 +129,14 @@ def test_frames_fill_the_slots_that_hold_a_source_frame(tmp_path):
     flipped = at_time(PoseWindowDataset(**config, frames=True, route_hw=(8, 8), p_hflip=1.0), 20)
     torch.testing.assert_close(flipped["route_patch"][expected, 0, -1], torch.tensor([16.0, 17, 18, 19, 20]) % 3)
     assert flipped["vision"].shape == (20, 3, 24, 32)
+    (tmp_path / "route_labels.npy").unlink()
+    np.savez_compressed(tmp_path / "route_labels.npz", labels=labels)  # the compressed sidecar reads the same
+    compressed = at_time(PoseWindowDataset(**config, route_hw=(8, 8)), 20)
+    assert torch.equal(compressed["route_patch"], sample["route_patch"])
+    assert torch.equal(compressed["route_mask"], expected)
+    (tmp_path / "route_labels.npz").unlink()
     plain = at_time(PoseWindowDataset(**make_clip(tmp_path), frames=True), 40)  # 20 fps: every slot
     assert plain["frame_mask"].all() and "route_patch" not in plain
-    (tmp_path / "route_labels.npy").unlink()
     bare = at_time(PoseWindowDataset(**config, route_hw=(8, 8)), 20)  # no sidecar: zeros, never real
     assert not bare["route_mask"].any() and torch.all(bare["route_patch"] == 0) and "vision" not in bare
 

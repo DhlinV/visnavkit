@@ -44,12 +44,17 @@ into `ego`), every slot's future poses (`pose_size` 2 | 3 | 5 = x, y | x, y, v |
 point / gps goals, one window every `stride_s` seconds, so every source frame rate yields the same
 window. `frames: true` adds `vision` — the source frame nearest each slot when it lies within half a
 slot, zeros otherwise — with `frame_mask`; `route_hw` adds `route_patch` + `route_mask` from a
-`route_labels.npy` (N, h, w) uint8 class-id sidecar; `embodiment_ids` {corpus dir: id} and an
+`route_labels.npy` (N, h, w) uint8 class-id sidecar (or `route_labels.npz`, key `labels`, compressed); `embodiment_ids` {corpus dir: id} and an
 `action_bounds` JSON {corpus dir: [[lo x 5], [hi x 5]]} add `embodiment_id` and `action_bounds` (the
 corpus is the clip's first directory under `data_root`). `common.uniform_t_anchors=true` puts the
 `plan_len_points` anchors on a fixed rate (`plan_len_seconds / plan_len_points` s apart) instead of the
-quadratic grid, in every dataset and the action space alike. `model=flowpilot_sts` trains on these
-windows (`experiment=flowpilot_sts_tiny`).
+quadratic grid, in every dataset and the action space alike. `model=flowpilot_dst` trains on these
+windows (`experiment=flowpilot_dst_tiny`). `trainer.logging.log_images_every_n_batches={train: N, val: M}`
+records the first window with a route every N / M batches — its current frame next to the route patch
+(black background, blue sidewalk, green crosswalk) — to `<log_dir>/images/` and to wandb when it is the logger.
+Top-level `augs` alters the real frames' pixels of train batches on the GPU, never the geometry:
+color jitter (one draw per window) and the reference's camera degradations — erase, per-frame gain,
+grayscale, blur, noise, JPEG, each with its own probability. Off by default, on in `flowpilot_dst_tiny`.
 
 `command=action_cache` writes every window's current-frame action [x, y, yaw, v, w] per corpus
 (`actions_<split>/<corpus>.npy`, no decode); `command=action_anchors` reads it (building it on demand)

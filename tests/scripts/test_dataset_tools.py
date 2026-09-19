@@ -13,7 +13,7 @@ from hydra import compose, initialize_config_module
 pytest.importorskip("torchcodec")
 
 from visnavkit.data.pose_dataset import PoseWindowDataset
-from visnavkit.models.flowpilot_sts import AnchorFlowHead
+from visnavkit.models.flowpilot_dst import AnchorFlowHead
 from visnavkit.scripts.dataset.actions import cache_actions, load_actions
 from visnavkit.scripts.dataset.anchors import fit_anchors, kmeans
 from visnavkit.scripts.dataset.cache import cache_targets, load_cache
@@ -190,7 +190,7 @@ def test_action_bounds_and_anchors_are_fitted_per_corpus(tmp_path):
     assert anchors.min() >= 0 and anchors.max() <= 1
     assert (out / "kmeans4_fast.png").exists() and (out / "kmeans4_slow.png").exists()
 
-    # The two files are what the pose dataset and the FlowPilot-STS head read.
+    # The two files are what the pose dataset and the FlowPilot-DST head read.
     dataset = PoseWindowDataset(
         "train.txt", tmp_path, seq_len=4, plan_len_seconds=1, plan_len_points=4, pose_size=5,
         action_bounds=str(out / "action_bounds.json"),

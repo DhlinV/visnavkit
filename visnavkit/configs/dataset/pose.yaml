@@ -24,7 +24,7 @@ train_loader:
   ego_features: ${common.ego_features}
   frames: false  # decode the frame nearest each slot -> vision (S, 3, h, w) + frame_mask
   frame_wh: null  # resize decoded frames to [w, h]
-  route_hw: null  # [h, w]: route_patch from the route_labels.npy sidecar + route_mask
+  route_hw: null  # [h, w]: route_patch from the route_labels.npy (or compressed .npz) sidecar + route_mask
   embodiment_ids: null  # {corpus dir: id} -> embodiment_id
   action_bounds: null  # JSON {corpus dir: [[lo x 5], [hi x 5]]} -> action_bounds (2, 5)
   p_hflip: 0.5

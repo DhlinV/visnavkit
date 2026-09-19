@@ -1,4 +1,4 @@
-"""Per-corpus action bounds and k-means anchors: the normalised action space FlowPilot-STS decodes in.
+"""Per-corpus action bounds and k-means anchors: the normalised action space FlowPilot-DST decodes in.
 
 A ``dataset=pose`` window's action is its current frame's future ``[x, y, yaw, v, w]``, read as
 per-step ``[dx, dy, dyaw, v, w]``. Every corpus — a clip's first directory under ``data_root`` —

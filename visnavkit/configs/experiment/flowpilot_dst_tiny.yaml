@@ -1,17 +1,17 @@
 # @package _global_
-# FlowPilot-STS tiny on the shared corpus in the clip layout: 1 s past at 20 Hz slots (frames + ego
+# FlowPilot-DST tiny on the shared corpus in the clip layout: 1 s past at 20 Hz slots (frames + ego
 # state + route + goal) -> 4 s plans at 20 Hz (80 anchors). Corpus dirs under data_root name the
-# embodiments; clips1k's route_labels.npy sidecars come from the corpus conversion. action_bounds.json (per
+# embodiments; clips1k's route_labels.npz sidecars come from the corpus conversion. action_bounds.json (per
 # corpus [[lo x 5], [hi x 5]] of the per-step dx, dy, dyaw, v, w) and the anchors come from
-#   uv run visnavkit-dataset command=action_anchors experiment=flowpilot_sts_tiny num_anchors=64 output_dir=<data_root>
+#   uv run visnavkit-dataset command=action_anchors experiment=flowpilot_dst_tiny num_anchors=64 output_dir=<data_root>
 # Point the model at the real assets: model.route.weights=<route VAE ckpt> model.head.anchors_path=<kmeans64.npy>
-# Smoke: uv run python -m visnavkit.scripts.smoke_forward flowpilot_sts_tiny
+# Smoke: uv run python -m visnavkit.scripts.smoke_forward flowpilot_dst_tiny
 defaults:
   - override /dataset: pose
-  - override /model: flowpilot_sts
+  - override /model: flowpilot_dst
   - _self_
 
-exp_name: flowpilot_sts_tiny
+exp_name: flowpilot_dst_tiny
 plan_len_seconds: 4
 plan_len_points: 80
 
@@ -63,3 +63,15 @@ dataset:
 
 metrics:
   timesteps_to_compute: [1.0, 2.0, 4.0]
+
+augs:  # train batches on the GPU: the reference's color jitter + camera degradations (clips1k_degradation)
+  color_jitter: [0.2, 0.2, 0.2, 0.1]
+  p_erase: 0.1
+  p_frame_brightness: 0.3
+  p_blur: 0.1
+  p_noise: 0.1
+  p_jpeg: 0.1
+
+trainer:
+  logging:
+    log_images_every_n_batches: { train: 1000, val: 300 }  # route images, the reference's plan-panel cadence
