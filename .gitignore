@@ -22,3 +22,4 @@ wandb
 # never commit model weights
 *.ckpt
 *.onnx
+nohup.out
