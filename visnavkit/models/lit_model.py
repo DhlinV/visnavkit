@@ -65,11 +65,14 @@ ROUTE_COLORS = torch.tensor(  # route class id -> RGB: background, sidewalk, cro
 )
 
 
-def route_image(batch):
-    """The batch's first window with a current route patch: [current frame | route patch in colour], (3, H, W + H) uint8."""
-    if "route_patch" not in batch or "route_mask" not in batch or not batch["route_mask"][:, -1].any():
-        return None
-    i = int(batch["route_mask"][:, -1].nonzero()[0])
+def route_images(batch, limit=None):
+    """Up to ``limit`` windows with a current route patch: [current frame | route patch in colour], (3, H, W + H) uint8."""
+    if "route_patch" not in batch or "route_mask" not in batch:
+        return []
+    return [_route_image(batch, i) for i in batch["route_mask"][:, -1].nonzero()[:limit, 0].tolist()]
+
+
+def _route_image(batch, i):
     frame = batch["vision"][i, -1].cpu()
     if frame.dtype != torch.uint8:
         frame = (frame.float() * 255).round().clamp(0, 255).to(torch.uint8)
@@ -159,6 +162,7 @@ class LitModel(L.LightningModule):
         validation_metrics_cfg = cfg.metrics.get("validation_metrics") or {}
         planner_calculators_cfg = validation_metrics_cfg.get("planner_calculators") or []
         self.planner_calculators = [instantiate(c) for c in planner_calculators_cfg]
+        self.route_samples = {}  # stage -> (step the collection started, route images so far)
         self.augment = FrameAugment(**augs) if (augs := cfg.get("augs")) else None
 
     @classmethod
@@ -221,26 +225,45 @@ class LitModel(L.LightningModule):
         rps = torch.tensor(x.shape[0] / elapsed, device=self.device, dtype=torch.float32)
         self.log(f"{stage}/rps", rps, prog_bar=True, sync_dist=True, reduce_fx="sum")
         every = (self.cfg.trainer.logging.get("log_images_every_n_batches") or {}).get(stage)
-        if every and batch_idx % every == 0 and self.trainer.is_global_zero:
-            self.record_route(batch, stage)
+        if every and self.trainer.is_global_zero:
+            if batch_idx % every == 0:
+                self.route_samples[stage] = (self.global_step, [])
+            self.record_routes(batch, stage)
 
         return y_hat, targets, loss_debug, x, effective_batch_size
 
     def on_fit_start(self):
         self.images_dir = Path(self.trainer.log_dir or ".") / "images"  # on every rank: log_dir is a broadcast
 
-    def record_route(self, batch, stage):
-        """The route image to <log_dir>/images/<stage>_route_step<N>.png and to every logger that takes images."""
-        image = route_image(batch)
-        if image is None:
+    def record_routes(self, batch, stage):
+        """Collect route images over consecutive batches until log_images_num_samples, then write them."""
+        if stage not in self.route_samples:
             return
-        path = self.images_dir / f"{stage}_route_step{self.global_step:07d}.png"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        write_png(image, str(path))
+        step, images = self.route_samples[stage]
+        wanted = self.cfg.trainer.logging.get("log_images_num_samples") or 1
+        images += route_images(batch, wanted - len(images))
+        if len(images) >= wanted:
+            self.flush_routes(stage)
+
+    def flush_routes(self, stage):
+        """The collected images to <log_dir>/images/<stage>_step<N>/<k>.png and to every logger that takes images."""
+        step, images = self.route_samples.pop(stage, (None, []))
+        if not images:
+            return
+        folder = self.images_dir / f"{stage}_step{step:07d}"
+        folder.mkdir(parents=True, exist_ok=True)
+        for k, image in enumerate(images):
+            write_png(image, str(folder / f"{k:03d}.png"))
         for experiment_logger in self.loggers:
             if hasattr(experiment_logger, "log_image"):  # e.g. WandbLogger
-                image_hwc = image.permute(1, 2, 0).numpy()
-                experiment_logger.log_image(key=f"{stage}/route", images=[image_hwc], step=self.global_step)
+                hwc = [image.permute(1, 2, 0).numpy() for image in images]
+                experiment_logger.log_image(key=f"{stage}/route", images=hwc, step=step)
+
+    def on_train_epoch_end(self):
+        self.flush_routes("train")  # an epoch that ends mid-collection still writes what it has
+
+    def on_validation_epoch_end(self):
+        self.flush_routes("val")
 
     def training_step(self, batch, batch_idx):
         self._step(batch, batch_idx, stage="train")

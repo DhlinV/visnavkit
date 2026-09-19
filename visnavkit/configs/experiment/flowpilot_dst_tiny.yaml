@@ -74,4 +74,5 @@ augs:  # train batches on the GPU: the reference's color jitter + camera degrada
 
 trainer:
   logging:
-    log_images_every_n_batches: { train: 1000, val: 300 }  # route images, the reference's plan-panel cadence
+    log_images_every_n_batches: { train: 2000, val: 2000 }  # val: from the first batch of every validation
+    log_images_num_samples: 200

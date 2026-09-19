@@ -7,7 +7,7 @@ from hydra import compose, initialize_config_module
 from hydra.utils import instantiate
 from torchvision.io import decode_png, read_file
 
-from visnavkit.models.lit_model import ROUTE_COLORS, LitModel, build_targets, disable_pretrained_downloads, route_image
+from visnavkit.models.lit_model import ROUTE_COLORS, LitModel, build_targets, disable_pretrained_downloads, route_images
 
 SMALL = [
     "model=flowpilot_dst",
@@ -143,21 +143,36 @@ def test_example_batch_runs_the_smoke_path():
     assert out.plan.plans.shape == (8, model.action_decoder.flat_size)
 
 
-def test_route_image_is_recorded_for_the_first_window_with_a_route(tmp_path):
+def test_route_images_are_collected_over_batches_until_the_sample_count(tmp_path):
     batch = make_batch()
     batch["route_mask"] = torch.tensor([[False] * 4, [True] * 4])  # only window 1 has a route
-    image = route_image(batch)
+    (image,) = route_images(batch)
     assert image.shape == (3, 32, 64 + 32) and image.dtype == torch.uint8
     frame = (batch["vision"][1, -1] * 255).round().to(torch.uint8)
     assert torch.equal(image[..., :64], frame)
     patch = ROUTE_COLORS[batch["route_patch"][1, -1].long()].permute(2, 0, 1)  # 80 x 80 -> 32 x 32, nearest
     assert torch.equal(image[..., 64:], patch[:, (torch.arange(32) * 2.5).long()][..., (torch.arange(32) * 2.5).long()])
-    assert route_image({**batch, "route_mask": torch.zeros(2, 4, dtype=torch.bool)}) is None
+    assert route_images({**batch, "route_mask": torch.zeros(2, 4, dtype=torch.bool)}) == []
 
     logged = []
     wandb_like = SimpleNamespace(log_image=lambda **kwargs: logged.append(kwargs))
-    lit = SimpleNamespace(trainer=SimpleNamespace(log_dir=str(tmp_path)), global_step=7, loggers=[wandb_like])
+    logging = {"log_images_num_samples": 3}
+    lit = SimpleNamespace(
+        trainer=SimpleNamespace(log_dir=str(tmp_path)),
+        cfg=SimpleNamespace(trainer=SimpleNamespace(logging=logging)),
+        global_step=7,
+        loggers=[wandb_like],
+        route_samples={"val": (7, [])},
+    )
+    lit.flush_routes = lambda stage: LitModel.flush_routes(lit, stage)
     LitModel.on_fit_start(lit)
-    LitModel.record_route(lit, batch, "val")
-    assert torch.equal(decode_png(read_file(str(tmp_path / "images" / "val_route_step0000007.png"))), image)
-    assert logged[0]["key"] == "val/route" and logged[0]["step"] == 7 and logged[0]["images"][0].shape == (32, 96, 3)
+    LitModel.record_routes(lit, batch, "val")  # 1 of 3: still collecting
+    assert not logged and not (tmp_path / "images").exists()
+    LitModel.record_routes(lit, {**batch, "route_mask": torch.ones(2, 4, dtype=torch.bool)}, "val")  # 2 more: done
+    folder = tmp_path / "images" / "val_step0000007"
+    assert sorted(f.name for f in folder.iterdir()) == ["000.png", "001.png", "002.png"]
+    assert torch.equal(decode_png(read_file(str(folder / "000.png"))), image)
+    assert logged[0]["key"] == "val/route" and logged[0]["step"] == 7 and len(logged[0]["images"]) == 3
+    assert lit.route_samples == {}
+    LitModel.record_routes(lit, batch, "val")  # no collection running: nothing
+    assert len(logged) == 1

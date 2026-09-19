@@ -50,8 +50,9 @@ corpus is the clip's first directory under `data_root`). `common.uniform_t_ancho
 `plan_len_points` anchors on a fixed rate (`plan_len_seconds / plan_len_points` s apart) instead of the
 quadratic grid, in every dataset and the action space alike. `model=flowpilot_dst` trains on these
 windows (`experiment=flowpilot_dst_tiny`). `trainer.logging.log_images_every_n_batches={train: N, val: M}`
-records the first window with a route every N / M batches — its current frame next to the route patch
-(black background, blue sidewalk, green crosswalk) — to `<log_dir>/images/` and to wandb when it is the logger.
+collects `log_images_num_samples` windows with a route every N / M batches — each its current frame next to
+the route patch (black background, blue sidewalk, green crosswalk) — into `<log_dir>/images/<stage>_step<S>/`
+and to wandb when it is the logger.
 Top-level `augs` alters the real frames' pixels of train batches on the GPU, never the geometry:
 color jitter (one draw per window) and the reference's camera degradations — erase, per-frame gain,
 grayscale, blur, noise, JPEG, each with its own probability. Off by default, on in `flowpilot_dst_tiny`.
