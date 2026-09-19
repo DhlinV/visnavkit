@@ -246,18 +246,20 @@ class LitModel(L.LightningModule):
             self.flush_routes(stage)
 
     def flush_routes(self, stage):
-        """The collected images to <log_dir>/images/<stage>_step<N>/<k>.png and to every logger that takes images."""
+        """The collected images as one <stage>/route entry to every logger that takes images (wandb), else to
+        <log_dir>/images/<stage>_step<N>/<k>.png."""
         step, images = self.route_samples.pop(stage, (None, []))
         if not images:
             return
-        folder = self.images_dir / f"{stage}_step{step:07d}"
-        folder.mkdir(parents=True, exist_ok=True)
-        for k, image in enumerate(images):
-            write_png(image, str(folder / f"{k:03d}.png"))
-        for experiment_logger in self.loggers:
-            if hasattr(experiment_logger, "log_image"):  # e.g. WandbLogger
-                hwc = [image.permute(1, 2, 0).numpy() for image in images]
-                experiment_logger.log_image(key=f"{stage}/route", images=hwc, step=step)
+        image_loggers = [lg for lg in self.loggers if hasattr(lg, "log_image")]  # e.g. WandbLogger
+        for experiment_logger in image_loggers:
+            hwc = [image.permute(1, 2, 0).numpy() for image in images]
+            experiment_logger.log_image(key=f"{stage}/route", images=hwc, step=step)
+        if not image_loggers:
+            folder = self.images_dir / f"{stage}_step{step:07d}"
+            folder.mkdir(parents=True, exist_ok=True)
+            for k, image in enumerate(images):
+                write_png(image, str(folder / f"{k:03d}.png"))
 
     def on_train_epoch_end(self):
         self.flush_routes("train")  # an epoch that ends mid-collection still writes what it has

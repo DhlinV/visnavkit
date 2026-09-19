@@ -169,10 +169,13 @@ def test_route_images_are_collected_over_batches_until_the_sample_count(tmp_path
     LitModel.record_routes(lit, batch, "val")  # 1 of 3: still collecting
     assert not logged and not (tmp_path / "images").exists()
     LitModel.record_routes(lit, {**batch, "route_mask": torch.ones(2, 4, dtype=torch.bool)}, "val")  # 2 more: done
-    folder = tmp_path / "images" / "val_step0000007"
-    assert sorted(f.name for f in folder.iterdir()) == ["000.png", "001.png", "002.png"]
-    assert torch.equal(decode_png(read_file(str(folder / "000.png"))), image)
     assert logged[0]["key"] == "val/route" and logged[0]["step"] == 7 and len(logged[0]["images"]) == 3
+    assert torch.equal(torch.from_numpy(logged[0]["images"][0]).permute(2, 0, 1), image)
+    assert not (tmp_path / "images").exists()  # wandb takes them: nothing on disk
     assert lit.route_samples == {}
     LitModel.record_routes(lit, batch, "val")  # no collection running: nothing
     assert len(logged) == 1
+
+    lit.loggers, lit.route_samples = [], {"train": (9, [image])}  # no image logger: PNGs on disk
+    LitModel.flush_routes(lit, "train")
+    assert torch.equal(decode_png(read_file(str(tmp_path / "images" / "train_step0000009" / "000.png"))), image)

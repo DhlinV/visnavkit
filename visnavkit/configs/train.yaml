@@ -39,8 +39,8 @@ trainer:
   logging:
     save_top_k_ckpts: 5
     # batches between route image collections ([current frame | route patch], windows with a route only),
-    # each log_images_num_samples images from consecutive rank-0 batches, written to
-    # <log_dir>/images/<stage>_step<N>/ and to image-capable loggers (wandb); null = off
+    # each log_images_num_samples images from consecutive rank-0 batches, logged as <stage>/route to
+    # image-capable loggers (wandb), else written to <log_dir>/images/<stage>_step<N>/; null = off
     log_images_every_n_batches: { train: null, val: null }
     log_images_num_samples: 1
     monitor: val/action_reg
