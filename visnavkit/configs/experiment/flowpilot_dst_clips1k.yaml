@@ -1,0 +1,13 @@
+# @package _global_
+# FlowPilot-DST tiny on clips1k alone: flowpilot_dst_tiny with the clips1k rows of the shared manifest
+# (val.txt is clips1k already). Write the train manifest once in data_root:
+#   grep "/clips1k/" train.txt > train_clips1k.txt
+defaults:
+  - flowpilot_dst_tiny
+  - _self_
+
+exp_name: flowpilot_dst_clips1k
+
+dataset:
+  train_loader:
+    file_list: train_clips1k.txt
