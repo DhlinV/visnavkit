@@ -14,7 +14,7 @@ Trains on ``dataset=pose`` windows with frames: ``vision`` (B, T, 3, H, W) in [0
 3. ``TemporalFusion``: [global | route] -> D + slot embedding -> causal self-attention over the slots
    (random past drop ``mask_p`` in training; a slot without a frame is no one's key), zero where no frame.
 4. ``FeatureTokens``, per frame with a frame: [global, gh x gw patches (+ 2-D sin-cos), route, goal, temporal],
-   each Linear -> D + type + slot embedding, + one embodiment token. The goal token is an MLP of
+   each Linear -> D + type + slot embedding, + one embodiment token (``embodiment_token``, off for one corpus). The goal token is an MLP of
    [distance / 100, cos, sin]; w.p. ``goal_mask_p`` per window in training, and whenever no goal is given,
    it is the learned empty-goal token.
 5. ``AnchorFlowHead`` (the reference AnchorFlowPlanner): K anchors of normalised per-step dx, dy; queries
@@ -230,14 +230,17 @@ class TemporalFusion(nn.Module):
 
 
 class FeatureTokens(nn.Module):
-    """Per frame: every feature Linear -> D + type + slot embedding (patches one token per cell), + the embodiment token."""
+    """Per frame: every feature Linear -> D + type + slot embedding (patches one token per cell), + the embodiment token
+    (none when ``num_embodiments`` is None)."""
 
     def __init__(self, dims, dim, seq_len, num_embodiments):
         super().__init__()
         self.proj = nn.ModuleDict({name: nn.Linear(width, dim) for name, width in dims.items()})
         self.type_emb = nn.Parameter(torch.randn(len(dims), dim) * 0.02)
         self.slot = nn.Parameter(torch.randn(seq_len, dim) * 0.02)
-        self.embodiment = nn.Embedding(num_embodiments + 1, dim)  # last row = unknown
+        self.embodiment = (
+            None if num_embodiments is None else nn.Embedding(num_embodiments + 1, dim)
+        )  # last row = unknown
 
     def forward(self, feats, slot, embodiment_id):
         """``{name: (N, F) | (N, C, gh, gw)}``, slot ``(N,)``, ``(N,)`` -> ``(N, L, D)``."""
@@ -250,7 +253,8 @@ class FeatureTokens(nn.Module):
             else:
                 token = self.proj[name](f)[:, None]
             tokens.append(token + self.type_emb[i] + self.slot[slot][:, None])
-        tokens.append(self.embodiment(embodiment_id)[:, None])
+        if self.embodiment is not None:
+            tokens.append(self.embodiment(embodiment_id)[:, None])
         return torch.cat(tokens, 1)
 
 
@@ -508,6 +512,7 @@ class FlowPilotDST(nn.Module):
         num_embodiments=14,
         goal_mask_p=0.5,
         speed_weight=1.0,
+        embodiment_token=True,
         temporal=None,
         route=None,
         head=None,
@@ -520,7 +525,10 @@ class FlowPilotDST(nn.Module):
         self.goal = nn.Sequential(nn.Linear(3, dim), nn.GELU(), nn.Linear(dim, dim))
         self.no_goal = nn.Parameter(torch.randn(dim) * 0.02)
         self.tokens = FeatureTokens(
-            {"global": c, "patch": c, "route": r, "goal": dim, "temporal": dim}, dim, seq_len, num_embodiments
+            {"global": c, "patch": c, "route": r, "goal": dim, "temporal": dim},
+            dim,
+            seq_len,
+            num_embodiments if embodiment_token else None,
         )
         self.action_decoder = AnchorFlowHead(dim, **dict(head or {}))
         self.num_embodiments, self.goal_mask_p, self.speed_weight = num_embodiments, goal_mask_p, speed_weight

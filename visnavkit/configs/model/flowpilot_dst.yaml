@@ -13,6 +13,7 @@ p_drop_prev: 0.3  # training: drop the previous frame of a pair w.p. 0.3 (its sp
 dim: 512
 seq_len: ${common.seq_length}
 num_embodiments: 14  # ids 0 .. 13; row 14 = unknown
+embodiment_token: true  # false: no embodiment token (one corpus, e.g. clips1k)
 goal_mask_p: 0.5  # training: the goal token is the learned empty-goal token w.p. 0.5 per window
 speed_weight: 1.0  # speed head, on whole pairs only: corpora below the slot rate (5 fps = 1 slot in 4) never supervise it
 temporal:

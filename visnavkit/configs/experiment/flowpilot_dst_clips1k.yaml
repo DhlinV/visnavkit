@@ -8,6 +8,17 @@ defaults:
 
 exp_name: flowpilot_dst_clips1k
 
+model:
+  embodiment_token: false  # one corpus: the embodiment token carries nothing
+  goal_mask_p: 0.5  # training: the learned empty-goal token w.p. 0.5 per window (the model default, pinned here)
+  temporal:
+    num_layers: 2  # causal self-attention over the slots
+  head:
+    num_layers: 2  # DiT blocks: cross-attention to the per-frame spatial tokens
+
+optimizer:
+  max_grad_norm: 5.0  # clip the total grad norm
+
 dataset:
   train_loader:
     file_list: train_clips1k.txt

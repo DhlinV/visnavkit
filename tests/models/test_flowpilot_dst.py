@@ -30,9 +30,9 @@ SMALL = [
 FRAME_MASK = torch.tensor([[True, True, True, True], [True, False, False, True]])
 
 
-def make_model():
+def make_model(*overrides):
     with initialize_config_module(version_base=None, config_module="visnavkit.configs"):
-        cfg = compose(config_name="train", overrides=SMALL)
+        cfg = compose(config_name="train", overrides=[*SMALL, *overrides])
     disable_pretrained_downloads(cfg.model)
     return instantiate(cfg.model)
 
@@ -81,6 +81,13 @@ def test_training_supervises_the_frames_that_hold_a_frame_and_the_whole_pairs():
     assert model.action_decoder.score[-1].weight.grad is not None
     assert not any(p.requires_grad for p in model.route_encoder.parameters())
     assert not model.route_encoder.training
+
+
+def test_the_embodiment_token_can_be_left_out():
+    model, batch = make_model("model.embodiment_token=false").train(), make_batch()
+    out = model(*inputs(batch)[:2], **inputs(batch)[2])
+    assert model.tokens.embodiment is None
+    assert out.plan.tokens.shape == (6, 1 + 2 + 3, 32)  # global, 1 x 2 patches, route, goal, temporal
 
 
 def test_speed_head_is_supervised_on_whole_pairs_only():
