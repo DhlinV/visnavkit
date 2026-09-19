@@ -11,6 +11,7 @@ from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from omegaconf import DictConfig, OmegaConf, open_dict
 
 from visnavkit.models.lit_model import LitModel
+from visnavkit.utils.display import display_callbacks
 
 torch.set_float32_matmul_precision("medium")
 
@@ -47,7 +48,8 @@ def create_trainer(cfg):
         callbacks.append(instantiate(cfg.ema))
     if experiment_logger:
         callbacks.append(LearningRateMonitor(logging_interval="step"))
-    return L.Trainer(**cfg.trainer.kwargs, logger=experiment_logger, callbacks=callbacks)
+    shown, kwargs = display_callbacks(cfg.trainer.get("display"), cfg.trainer.kwargs)
+    return L.Trainer(**cfg.trainer.kwargs, **kwargs, logger=experiment_logger, callbacks=callbacks + shown)
 
 
 @hydra.main(version_base=None, config_path="../configs", config_name="train")

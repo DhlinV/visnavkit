@@ -431,8 +431,8 @@ class AnchorFlowHead(nn.Module):
         return dict(total=wv * v + ws * s + wc * ce, reg=v + s, cls=ce, velocity=v, state=s)
 
     @torch.no_grad()
-    def sample(self, kv, bounds, ego_vw, noise=None, num_steps=None):
-        """-> the top-score mode's metric plan ``(N, T, 5)`` and its score ``(N,)``; ``noise`` None = N(0, I)."""
+    def decode(self, kv, bounds, ego_vw, noise=None, num_steps=None):
+        """Every anchor's state ``(N, K, T, 5)`` and score ``(N, K)``; ``noise`` None = N(0, I)."""
         n, kv = len(kv), self.kv_norm(kv)
         anchors = self.anchors[None].expand(n, -1, -1, -1)
         noise = torch.randn_like(anchors) if noise is None else noise
@@ -443,9 +443,25 @@ class AnchorFlowHead(nn.Module):
             t = torch.full((n,), s0 + i * dt, device=kv.device)
             velocity, state, score = self.denoise(x, t, self.time_embed(t).to(kv.dtype) + ego, kv)
             x = x + dt * velocity.float()
-        rows, best = torch.arange(n, device=kv.device), score.argmax(1)
-        plan = torch.cat([x[rows, best].clamp(-3.0, 3.0), state[rows, best].float()], -1)
-        return self.metric(plan, bounds), score[rows, best].float()
+        return torch.cat([x.clamp(-3.0, 3.0), state.float()], -1), score.float()
+
+    @torch.no_grad()
+    def sample(self, kv, bounds, ego_vw, noise=None, num_steps=None):
+        """-> the top-score mode's metric plan ``(N, T, 5)`` and its score ``(N,)``; ``noise`` None = N(0, I)."""
+        state, score = self.decode(kv, bounds, ego_vw, noise, num_steps)
+        rows, best = torch.arange(len(kv), device=kv.device), score.argmax(1)
+        return self.metric(state[rows, best], bounds), score[rows, best]
+
+    @torch.no_grad()
+    def top_modes(self, kv, bounds, ego_vw, k=6):
+        """The ``k`` highest-score modes decoded from noise 0: metric ``(N, k, T, 5)``, softmax probabilities ``(N, k)``."""
+        zeros = torch.zeros(len(kv), *self.anchors.shape, device=kv.device)
+        state, score = self.decode(kv, bounds, ego_vw, noise=zeros)
+        prob, top = score.softmax(1).topk(min(k, score.shape[1]), dim=1)
+        state = torch.gather(state, 1, top[..., None, None].expand(-1, -1, *state.shape[2:]))
+        n, k = top.shape
+        metric = self.metric(state.flatten(0, 1), bounds.repeat_interleave(k, 0)).view(n, k, *state.shape[2:])
+        return metric, prob
 
     def plans(self, kv, bounds, ego_vw):
         """Two modes, decoded from noise 0 and from one draw -> flat plans ``(N, flat_size)``, mu ``(N, 2, T, 5)``, logits ``(N, 2)``."""
@@ -567,6 +583,14 @@ class FlowPilotDST(nn.Module):
             plans=plans, logits=logits, tokens=kv, valid=frame_mask.reshape(-1), idx=idx, ego_vw=ego_vw, bounds=bounds
         )
         return DSTOutput(plan=plan, speed=speed.reshape(b * t, 1), pair_mask=pair_mask.reshape(-1))
+
+    @torch.no_grad()
+    def current_modes(self, plan: DSTPlan, seq_len, k=6):
+        """Each window's current frame (its last slot) from an eval forward's ``plan``: the windows ``(M,)`` whose
+        current slot holds a frame, their top-``k`` metric modes ``(M, k, T, 5)``, probabilities ``(M, k)``, ego [v, w]."""
+        rows = (plan.idx % seq_len == seq_len - 1).nonzero().squeeze(1)
+        modes, prob = self.action_decoder.top_modes(plan.tokens[rows], plan.bounds[rows], plan.ego_vw[rows], k)
+        return plan.idx[rows] // seq_len, modes, prob, plan.ego_vw[rows]
 
     def example_batch(self, batch_size, frames, image_hw, device=None):
         """Synthetic ``(vision, goal, {modality key: value})`` inputs for shape checks; every slot holds a frame."""

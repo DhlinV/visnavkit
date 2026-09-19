@@ -27,6 +27,8 @@ train_loader:
   route_hw: null  # [h, w]: route_patch from the route_labels.npy (or compressed .npz) sidecar + route_mask
   embodiment_ids: null  # {corpus dir: id} -> embodiment_id
   action_bounds: null  # JSON {corpus dir: [[lo x 5], [hi x 5]]} -> action_bounds (2, 5)
+  camera: false  # camera (10,) from the clip's camera.json, at frame_wh
+  principal_point_calibration: false  # shift frames by camera.json's principal_point_delta (clips1k SLAM offsets)
   p_hflip: 0.5
   no_flip: []  # clip path substrings never mirrored, e.g. [nvidia, openscene, navsim]: keep the side of the road
   shuffle: true
@@ -50,6 +52,8 @@ val_loader:
   route_hw: null
   embodiment_ids: null
   action_bounds: null
+  camera: false
+  principal_point_calibration: false
   p_hflip: 0.0
   no_flip: []
   shuffle: false

@@ -2,6 +2,8 @@
 
 from types import SimpleNamespace
 
+import numpy as np
+
 import torch
 from hydra import compose, initialize_config_module
 from hydra.utils import instantiate
@@ -156,26 +158,49 @@ def test_route_images_are_collected_over_batches_until_the_sample_count(tmp_path
 
     logged = []
     wandb_like = SimpleNamespace(log_image=lambda **kwargs: logged.append(kwargs))
-    logging = {"log_images_num_samples": 3}
+    model = make_model().train()
     lit = SimpleNamespace(
         trainer=SimpleNamespace(log_dir=str(tmp_path)),
-        cfg=SimpleNamespace(trainer=SimpleNamespace(logging=logging)),
+        cfg=SimpleNamespace(trainer=SimpleNamespace(logging={"log_images_num_samples": 3, "log_images_top_k": 3})),
         global_step=7,
         loggers=[wandb_like],
-        route_samples={"val": (7, [])},
+        model=model,
+        image_samples={"val": dict(step=7, windows=0, images={"route": [], "plan": []})},
     )
-    lit.flush_routes = lambda stage: LitModel.flush_routes(lit, stage)
+    lit.flush_images = lambda stage: LitModel.flush_images(lit, stage)
+    lit.plan_panels = lambda *args: LitModel.plan_panels(lit, *args)
     LitModel.on_fit_start(lit)
-    LitModel.record_routes(lit, batch, "val")  # 1 of 3: still collecting
+    batch["past_poses"] = torch.zeros(2, 4, 3)
+    batch["camera"] = torch.tensor([30.0, 30.0, 32.0, 16.0, 0, 0, 0, 0, 0.5, 0]).expand(2, 10)
+    LitModel.record_images(lit, batch, "val", inputs(batch))  # 2 of 3 windows: still collecting
     assert not logged and not (tmp_path / "images").exists()
-    LitModel.record_routes(lit, {**batch, "route_mask": torch.ones(2, 4, dtype=torch.bool)}, "val")  # 2 more: done
-    assert logged[0]["key"] == "val/route" and logged[0]["step"] == 7 and len(logged[0]["images"]) == 3
-    assert torch.equal(torch.from_numpy(logged[0]["images"][0]).permute(2, 0, 1), image)
+    routed = {**batch, "route_mask": torch.ones(2, 4, dtype=torch.bool)}
+    LitModel.record_images(lit, routed, "val", inputs(routed))  # 1 more: done
+    entries = {entry["key"]: entry for entry in logged}
+    assert set(entries) == {"val/route", "val/plan"} and all(e["step"] == 7 for e in logged)
+    assert len(entries["val/route"]["images"]) == 2  # window 1 of the first batch + window 0 of the second
+    assert torch.equal(torch.from_numpy(entries["val/route"]["images"][0]).permute(2, 0, 1), image)
+    plans = entries["val/plan"]["images"]
+    assert len(plans) == 3 and all(p.dtype == np.uint8 and p.ndim == 3 and p.shape[-1] == 3 for p in plans)
+    assert model.training  # the eval forward restores the mode
     assert not (tmp_path / "images").exists()  # wandb takes them: nothing on disk
-    assert lit.route_samples == {}
-    LitModel.record_routes(lit, batch, "val")  # no collection running: nothing
-    assert len(logged) == 1
+    assert lit.image_samples == {}
+    LitModel.record_images(lit, batch, "val", inputs(batch))  # no collection running: nothing
+    assert len(logged) == 2
 
-    lit.loggers, lit.route_samples = [], {"train": (9, [image])}  # no image logger: PNGs on disk
-    LitModel.flush_routes(lit, "train")
-    assert torch.equal(decode_png(read_file(str(tmp_path / "images" / "train_step0000009" / "000.png"))), image)
+    lit.loggers = []  # no image logger: PNGs on disk
+    lit.image_samples = {"train": dict(step=9, windows=1, images={"route": [image], "plan": []})}
+    LitModel.flush_images(lit, "train")
+    assert torch.equal(decode_png(read_file(str(tmp_path / "images" / "train_step0000009" / "route_000.png"))), image)
+
+
+def test_top_modes_rank_the_anchors_and_keep_the_best_decode():
+    model, batch = make_model().eval(), make_batch()
+    out = model(*inputs(batch)[:2], **inputs(batch)[2])
+    windows, modes, probs, ego_vw = model.current_modes(out.plan, 4, k=3)
+    assert windows.tolist() == [0, 1] and modes.shape == (2, 3, 8, 5) and probs.shape == (2, 3)
+    assert torch.all(probs[:, :-1] >= probs[:, 1:]) and torch.all(probs.sum(1) <= 1 + 1e-5)
+    rows = (out.plan.idx % 4 == 3).nonzero().squeeze(1)
+    zeros = torch.zeros(2, *model.action_decoder.anchors.shape)
+    best, _ = model.action_decoder.sample(out.plan.tokens[rows], out.plan.bounds[rows], out.plan.ego_vw[rows], zeros)
+    torch.testing.assert_close(modes[:, 0], best)  # rank 1 = the noise-0 plan the metrics read

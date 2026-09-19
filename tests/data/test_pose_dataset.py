@@ -10,7 +10,7 @@ import pytest
 import torch
 from omegaconf import OmegaConf
 
-from visnavkit.data.pose_dataset import PoseDataModule, PoseWindowDataset
+from visnavkit.data.pose_dataset import PoseDataModule, PoseWindowDataset, translate
 from visnavkit.scripts.dataset.preprocess import find_clips, preprocess
 
 ASSETS = Path(__file__).resolve().parents[2] / "assets" / "datasets"
@@ -196,3 +196,33 @@ def test_bundled_corpus_yields_finite_windows(corpus, tmp_path):
     assert sample["ego"].shape == (20, 5) and sample["future_poses"].shape == (20, 80, 3)
     assert sample["vision"].shape == (20, 3, 54, 96) and sample["frame_mask"][-1]  # the current frame is real
     assert all(torch.isfinite(value).all() for value in sample.values())
+
+
+def test_translate_moves_the_content_by_the_offset_with_zeros_outside():
+    frames = torch.zeros(1, 3, 6, 8, dtype=torch.uint8)
+    frames[..., 2, 3] = 200
+    moved = translate(frames, 1.0, -2.0)  # out(x, y) = in(x + 1, y - 2): the dot moves to (2, 4)
+    assert moved[0, 0].nonzero().tolist() == [[4, 2]] and int(moved[0, 0, 4, 2]) == 200
+    half = translate(frames, 0.5, 0.0)  # bilinear: split over x = 2, 3
+    assert int(half[0, 0, 2, 2]) == 100 and int(half[0, 0, 2, 3]) == 100
+    assert torch.equal(translate(frames, 0.0, 0.0), frames)
+    assert not translate(frames, 9.0, 0.0).any()
+
+
+def test_camera_is_scaled_to_the_frame_and_the_calibration_recentres_the_frames(tmp_path):
+    config = make_clip(tmp_path)
+    render_video(tmp_path, 161, 20, size="32x24")
+    camera = [20.0, 20.0, 16.0, 12.0, -0.03, 0.003, 0.0, 0.0, 0.456, 1.0]
+    meta = {"camera": camera, "width": 32, "height": 24, "principal_point_delta": [2.0, -1.0]}
+    (tmp_path / "camera.json").write_text(json.dumps(meta))
+    kw = dict(config, frames=True, frame_wh=(16, 12))
+    plain = at_time(PoseWindowDataset(**kw, camera=True), 40)  # the image keeps its offset: cx, cy follow it
+    torch.testing.assert_close(plain["camera"], torch.tensor([10.0, 10.0, 9.0, 5.5, -0.03, 0.003, 0, 0, 0.456, 1.0]))
+    calibrated = at_time(PoseWindowDataset(**kw, camera=True, principal_point_calibration=True), 40)
+    torch.testing.assert_close(calibrated["camera"][:4], torch.tensor([10.0, 10.0, 8.0, 6.0]))  # nominal
+    torch.testing.assert_close(calibrated["vision"], translate(plain["vision"], 1.0, -0.5))  # the offset at 16 x 12
+    flipped = at_time(PoseWindowDataset(**kw, camera=True, p_hflip=1.0), 40)
+    assert float(flipped["camera"][2]) == 16 - 9.0
+    torch.testing.assert_close(plain["past_poses"][:, 0], torch.arange(-0.95, 0.01, 0.05, dtype=torch.float32))
+    with pytest.raises(ValueError, match="frame_wh"):
+        PoseWindowDataset(**config, camera=True)

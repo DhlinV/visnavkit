@@ -51,6 +51,8 @@ dataset:
     route_hw: [80, 80]
     embodiment_ids: ${embodiments}
     action_bounds: action_bounds.json
+    camera: true  # the plan panels project onto the frame
+    principal_point_calibration: true  # clips1k: recentre each clip's SLAM principal point (train and val)
     no_flip: [nvidia, openscene, navsim]
   val_loader:
     pose_size: 5
@@ -60,6 +62,8 @@ dataset:
     route_hw: [80, 80]
     embodiment_ids: ${embodiments}
     action_bounds: action_bounds.json
+    camera: true  # the plan panels project onto the frame
+    principal_point_calibration: true  # clips1k: recentre each clip's SLAM principal point (train and val)
 
 metrics:
   timesteps_to_compute: [1.0, 2.0, 4.0]

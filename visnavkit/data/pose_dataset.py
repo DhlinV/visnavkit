@@ -1,6 +1,7 @@
 """Windows on a fixed slot grid: the past second of ego state (and frames) plus the future trajectory."""
 
 import json
+import math
 import os
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from visnavkit.utils.orientation import yaw_from_quat
 GOAL_TYPES = ("none", "point", "gps")
 EGO_FEATURES = {"past_xy": 2, "yaw": 1, "speed": 1, "yaw_rate": 1}  # name -> channels
 POSE_SIZES = {2: "x, y", 3: "x, y, v", 5: "x, y, yaw, v, w"}
+CAMERA = "camera.json"  # {"camera": [fx, fy, cx, cy, k1..k4, cam_height_m, cam_type], "width", "height", "principal_point_delta"}
 ROUTE_LABELS = "route_labels"  # .npy (memory-mapped) or .npz (compressed, key `labels`): (N, h, w) uint8 class ids
 
 
@@ -52,6 +54,37 @@ def load_route_labels(clip):
     return None
 
 
+def load_camera(clip, frame_wh):
+    """The clip's camera sidecar at ``frame_wh``: the camera vector ``(10,)`` and the principal-point offset ``(2,)`` px."""
+    meta = json.loads((clip / CAMERA).read_text())
+    sx, sy = frame_wh[0] / meta["width"], frame_wh[1] / meta["height"]
+    camera = np.asarray(meta["camera"], dtype=np.float32)
+    camera[[0, 2]] *= sx
+    camera[[1, 3]] *= sy
+    delta = np.asarray(meta.get("principal_point_delta", (0.0, 0.0)), dtype=np.float32) * [sx, sy]
+    return camera, delta
+
+
+def _shift(x, k, axis):
+    """``out[j] = x[j + k]`` along ``axis``, zeros past the edge."""
+    out = torch.zeros_like(x)
+    n = x.shape[axis]
+    if abs(k) < n:
+        src = x.narrow(axis, max(k, 0), n - abs(k))
+        out.narrow(axis, max(-k, 0), n - abs(k)).copy_(src)
+    return out
+
+
+def translate(frames, dx, dy):
+    """``(N, C, H, W)`` uint8 -> ``out(x, y) = in(x + dx, y + dy)``, bilinear, zeros outside (the reference's warp)."""
+    x = frames.float()
+    for axis, d in ((-1, float(dx)), (-2, float(dy))):
+        i = math.floor(d)
+        a = d - i
+        x = (1 - a) * _shift(x, i, axis) + a * _shift(x, i + 1, axis) if a else _shift(x, i, axis)
+    return x.round_().clamp_(0, 255).to(torch.uint8)
+
+
 def slot_frames(times, slot_times, hz):
     """Per slot the nearest source frame and whether it lies within half a slot of the slot time."""
     j = np.clip(np.searchsorted(times, slot_times), 1, len(times) - 1)
@@ -72,7 +105,7 @@ class PoseWindowDataset(Dataset):
       ``yaw`` (heading relative to the current one), ``speed``, ``yaw_rate``.
     - ``future_poses`` (S, T, pose_size) per slot in that slot's frame: ``x, y`` | ``x, y, v`` |
       ``x, y, yaw, v, w``; ``target_times_s`` (T,), ``frame_times_s`` (S,), ``frame_speeds`` (S, 1) as
-      Mp4WindowDataset gives them.
+      Mp4WindowDataset gives them; ``past_poses`` (S, 3) [x, y, yaw] of every slot in the current frame.
     - ``goal``: ``point`` (S, 3) distance (m) / cos / sin or ``gps`` (S, 2) to a frame ``goal_horizon_s``
       after the current one, in each slot's ego frame. Image goals need frames and are not offered.
     - ``frames``: ``vision`` (S, 3, h, w) uint8, each slot the source frame nearest to its time when
@@ -86,6 +119,12 @@ class PoseWindowDataset(Dataset):
       the clip path under ``data_root``; ``action_bounds`` JSON {corpus: [[lo x 5], [hi x 5]]} gives
       ``action_bounds`` (2, 5), the per-step [dx, dy, dyaw, v, w] range of that embodiment.
 
+    ``camera``: ``camera`` (10,) [fx, fy, cx, cy, k1, k2, k3, k4, cam_height_m, cam_type] at the frame size
+    from the clip's ``camera.json`` (cam_type 0 pinhole, 1 Kannala-Brandt fisheye, 2 unknown).
+    ``principal_point_calibration``: a clip whose sidecar carries a ``principal_point_delta`` (clips1k's
+    per-clip SLAM offset) has its frames shifted by it, so the principal point lands at the nominal cx, cy
+    (the reference's principal-point calibration: deterministic, train and val alike); without it the
+    offset moves ``camera``'s cx, cy instead.
     ``p_hflip`` mirrors frames, route patches, y, yaw, yaw rate and the goal; clips whose path contains
     a ``no_flip`` substring are never mirrored (driving corpora keep their side of the road).
     ``shuffle`` belongs to the loader.
@@ -111,6 +150,8 @@ class PoseWindowDataset(Dataset):
         route_hw=None,
         embodiment_ids=None,
         action_bounds=None,
+        camera=False,
+        principal_point_calibration=False,
         p_hflip=0.0,
         no_flip=(),
         shuffle=True,
@@ -147,6 +188,9 @@ class PoseWindowDataset(Dataset):
             }
             if any(v.shape != (2, 5) for v in self.bounds.values()):
                 raise ValueError(f"{action_bounds} must map each corpus to [[lo x 5], [hi x 5]]")
+        self.camera, self.calibrate = bool(camera), bool(principal_point_calibration)
+        if (self.camera or self.calibrate) and self.frame_wh is None:
+            raise ValueError("camera / principal_point_calibration need frame_wh (the camera is scaled to it)")
         self.p_hflip = p_hflip
         self.no_flip = tuple(no_flip or ())
         if self.frames:
@@ -218,8 +262,16 @@ class PoseWindowDataset(Dataset):
         vision = route = None
         if self.frames or self.route_hw is not None:
             frame_idxs, mask = slot_frames(times, slot_times, self.hz)
+        camera = delta = None
+        if self.camera or self.calibrate:
+            wh = self.frame_wh
+            camera, delta = load_camera(clip, wh)
         if self.frames:
             vision = self._decode(video_fp, frame_idxs, mask)
+            if self.calibrate and delta.any():
+                vision[mask] = translate(vision[mask], *delta)
+        if camera is not None and not (self.frames and self.calibrate):
+            camera[2:4] += delta  # the image keeps its offset: the principal point sits there
         if self.route_hw is not None:
             route, route_mask = np.zeros((self.seq_len, *self.route_hw), np.float32), np.zeros(self.seq_len, bool)
             if (labels := load_route_labels(clip)) is not None:
@@ -241,6 +293,8 @@ class PoseWindowDataset(Dataset):
                 vision = torch.flip(vision, dims=[-1])
             if route is not None:
                 route = np.ascontiguousarray(route[..., ::-1])
+            if camera is not None:
+                camera[2] = wh[0] - camera[2]  # mirroring the image mirrors cx
         if goal is not None and self.goal_type == "point":
             goal = point_goal_from_local(goal)
 
@@ -250,7 +304,10 @@ class PoseWindowDataset(Dataset):
             future_poses=torch.from_numpy(future),
             target_times_s=torch.tensor(self.t_anchors, dtype=torch.float32),
             frame_speeds=torch.from_numpy(vs.astype(np.float32)).reshape(-1, 1),
+            past_poses=torch.from_numpy(np.column_stack([past_xy, heading]).astype(np.float32)),
         )
+        if camera is not None:
+            sample["camera"] = torch.from_numpy(camera)
         if self.ego_features:
             sample["ego"] = torch.from_numpy(np.concatenate([ego[n] for n in self.ego_features], -1).astype(np.float32))
         if goal is not None:

@@ -36,13 +36,21 @@ trainer:
     check_val_every_n_epoch: 1
     num_sanity_val_steps: 2
     log_every_n_steps: 1
+  display:  # console output (visnavkit.utils.display)
+    progress_bar: tqdm  # tqdm (the reference: Lightning's bar) | rich (the rich extra) | lines (plain lines, for nohup / tee) | none
+    refresh_every_n_steps: 1  # tqdm / rich refresh rate; lines: steps between lines (e.g. 50)
+    model_summary: lightning  # lightning (the reference: depth-1 table) | deep | rich (the rich extra) | stages | none
+    summary_depth: 2  # deep / rich: module levels shown
   logging:
     save_top_k_ckpts: 5
-    # batches between route image collections ([current frame | route patch], windows with a route only),
-    # each log_images_num_samples images from consecutive rank-0 batches, logged as <stage>/route to
-    # image-capable loggers (wandb), else written to <log_dir>/images/<stage>_step<N>/; null = off
+    # batches between image collections of log_images_num_samples windows from consecutive rank-0 batches:
+    # <stage>/route ([current frame | route patch], windows with a route) and <stage>/plan (visnavkit.utils.plan_viz
+    # panels: GT and the top log_images_top_k modes of an eval forward on the frame, in BEV and as v / w / yaw
+    # curves; models with current_modes, needs the plot extra), logged to image-capable loggers (wandb), else
+    # written to <log_dir>/images/<stage>_step<N>/; null = off
     log_images_every_n_batches: { train: null, val: null }
     log_images_num_samples: 1
+    log_images_top_k: 6
     monitor: val/action_reg
     mode: min
   resume:

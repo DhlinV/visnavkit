@@ -50,9 +50,17 @@ corpus is the clip's first directory under `data_root`). `common.uniform_t_ancho
 `plan_len_points` anchors on a fixed rate (`plan_len_seconds / plan_len_points` s apart) instead of the
 quadratic grid, in every dataset and the action space alike. `model=flowpilot_dst` trains on these
 windows (`experiment=flowpilot_dst_tiny`). `trainer.logging.log_images_every_n_batches={train: N, val: M}`
-collects `log_images_num_samples` windows with a route every N / M batches — each its current frame next to
-the route patch (black background, blue sidewalk, green crosswalk) — as `<stage>/route` on wandb, or into
-`<log_dir>/images/<stage>_step<S>/` without an image-capable logger.
+collects `log_images_num_samples` windows every N / M batches: `<stage>/route` (the current frame next to the
+route patch: black background, blue sidewalk, green crosswalk) and `<stage>/plan` (`visnavkit.utils.plan_viz`,
+after the reference's panel: GT and the top `log_images_top_k` modes of an eval forward projected on the frame,
+in BEV with heading arrows, and as v / w / yaw curves; needs the `plot` extra) — on wandb, or into
+`<log_dir>/images/<stage>_step<S>/` without an image-capable logger. `camera: true` adds `camera` (10,)
+[fx, fy, cx, cy, k1..k4, cam_height_m, cam_type] at the frame size from the clip's `camera.json` sidecar
+(`{"camera", "width", "height", "principal_point_delta"}`); `principal_point_calibration: true` shifts the frames
+of a clip whose sidecar carries a `principal_point_delta` (clips1k's per-clip SLAM offset) so the principal point
+lands at the nominal cx, cy, in train and val alike, as the reference's principal-point calibration.
+`trainer.display` picks the console style: `progress_bar` tqdm | rich | lines | none, `model_summary`
+lightning | deep | rich | stages | none.
 Top-level `augs` alters the real frames' pixels of train batches on the GPU, never the geometry:
 color jitter (one draw per window) and the reference's camera degradations — erase, per-frame gain,
 grayscale, blur, noise, JPEG, each with its own probability. Off by default, on in `flowpilot_dst_tiny`.
